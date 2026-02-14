@@ -1,148 +1,134 @@
-# Mem OS for OpenClaw (latest)
-
-**Best-in-class memory stack for OpenClaw agents — local-first, auditable, self-correcting.**
-
-This repository is a drop-in memory layer designed specifically for OpenClaw (latest). It upgrades an OpenClaw bot from "chat history + notes" to a governed Memory OS with:
-
-- persistent structured memory (decisions / tasks / entities / incidents)
-- deterministic contradiction + drift detection
-- proposals + safe apply + rollback
-- audit trail + integrity validation
-- optional semantic recall (vector) with local-first defaults
-
-If you want the strongest memory you can reasonably run with OpenClaw — this is it.
-
----
-
-## What this gives your OpenClaw bot
-
-### Persistent memory that stays correct over months/years
-
-Not just "store everything" — but store it with:
-- schemas
-- validation
-- provenance ("no source = no memory claim")
-- supersede chains (no silent edits)
-
-### An "immune system" for memory
-
-Mem OS continuously checks and reports:
-- contradictions between decisions
-- drift (dead decisions, stalled tasks, repeated incidents)
-- coverage score (are decisions actually enforced?)
-- integrity regressions
-
-### Safe evolution (no silent corruption)
-
-All changes flow through: `detect_only` → `propose` → `enforce`
-
-With:
-- proposal queue
-- apply engine with snapshot + receipt + DIFF
-- automatic rollback if validation fails
+<p align="center">
+  <h1 align="center">Mem OS</h1>
+  <p align="center">
+    <strong>Memory + Immune System for OpenClaw agents</strong>
+  </p>
+  <p align="center">
+    Local-first &bull; Auditable &bull; Self-correcting
+  </p>
+  <p align="center">
+    <a href="https://github.com/star-ga/mem-os/blob/main/LICENSE"><img src="https://img.shields.io/github/license/star-ga/mem-os?style=flat-square&color=blue" alt="License"></a>
+    <a href="https://github.com/star-ga/mem-os/releases"><img src="https://img.shields.io/github/v/release/star-ga/mem-os?style=flat-square&color=green" alt="Release"></a>
+    <img src="https://img.shields.io/badge/python-3.8%2B-blue?style=flat-square&logo=python&logoColor=white" alt="Python 3.8+">
+    <img src="https://img.shields.io/badge/dependencies-zero-brightgreen?style=flat-square" alt="Zero Dependencies">
+    <a href="https://github.com/star-ga/mem-os/stargazers"><img src="https://img.shields.io/github/stars/star-ga/mem-os?style=flat-square" alt="Stars"></a>
+    <img src="https://img.shields.io/badge/OpenClaw-latest-purple?style=flat-square" alt="OpenClaw latest">
+  </p>
+</p>
 
 ---
 
-## Designed for OpenClaw (latest)
+Drop-in memory layer for [OpenClaw](https://github.com/anthropics/claude-code) (latest). Upgrades your agent from "chat history + notes" to a governed **Memory OS** with structured persistence, contradiction detection, drift analysis, safe self-correction, and full audit trail.
 
-Mem OS integrates with OpenClaw workflows in two ways:
-
-1. **Workspace-native files** (Markdown blocks)
-2. **Optional hooks/skills** (session start/stop, `/scan`, `/apply`, `/recall`)
-
-No daemon required. It is just files + scripts.
+> **If you want the strongest memory you can reasonably run with OpenClaw — this is it.**
 
 ---
 
-## Recall (search memory like a human)
+## Table of Contents
 
-**Default: Local lexical recall (zero dependencies)**
-
-Field-weighted TF-IDF ranking across decisions, tasks, entities, specs/docs. Fast and deterministic.
-
-**Optional: Vector recall (pluggable)**
-
-If you want semantic similarity search:
-- local embeddings + local vector DB (recommended)
-- or Pinecone (if you already run it)
-
-Vector is optional — governance and integrity remain the same.
-
----
-
-## Auto-capture (safe)
-
-At session end, Mem OS can detect "decision-like" language and:
-- generate proposals (not auto-write into DECISIONS/TASKS)
-- flag unfiled decisions in SIGNALS
-- keep the memory consistent without manual bookkeeping
-
-All captured signals go through `/apply` before becoming formal blocks — no memory poisoning.
+- [Why Mem OS](#why-mem-os)
+- [Features](#features)
+- [Quick Start](#quick-start)
+- [Commands](#commands)
+- [Architecture](#architecture)
+- [How It Compares](#how-it-compares)
+- [Recall](#recall)
+- [Auto-Capture](#auto-capture)
+- [Governance Modes](#governance-modes)
+- [Block Format](#block-format)
+- [Configuration](#configuration)
+- [Contributing](#contributing)
+- [License](#license)
 
 ---
 
-## Quick comparison
+## Why Mem OS
 
-| Capability | Typical "memory plugin" | Mem OS for OpenClaw |
+Most memory plugins **store and retrieve**. That's table stakes.
+
+Mem OS also **detects when your memory is wrong** — contradictions between decisions, drift from informal choices never formalized, dead decisions nobody references, orphan tasks pointing at nothing — and offers a safe path to fix it.
+
+| Problem | What happens without Mem OS | What Mem OS does |
 |---|---|---|
-| Persist memory | Yes | Yes |
-| Semantic recall | Yes (usually cloud) | Optional (local-first) |
-| Auto-capture | Yes (auto-write) | Proposal-based (safe) |
-| Contradictions / drift | No | Yes |
-| Integrity validation | No | Yes |
-| Safe apply + rollback | No | Yes |
-| Audit trail | Rare | Yes |
-| Mode governance | No | Yes |
-| Local-only operation | Sometimes | Yes |
+| Two decisions contradict each other | Agent follows whichever it saw last | Flags contradiction, links both, proposes resolution |
+| Decision made in chat, never formalized | Lost after session ends | Auto-captured as signal, proposed for formalization |
+| Old decision nobody follows anymore | Zombie decision confuses future sessions | Detected as "dead", flagged for supersede or archive |
+| Task references deleted decision | Silent breakage | Caught as orphan reference in integrity scan |
+
+---
+
+## Features
+
+### Persistent Memory
+Structured, validated, append-only decisions / tasks / entities / incidents with provenance and supersede chains.
+
+### Immune System
+Continuous integrity checking: contradictions, drift, dead decisions, orphan tasks, coverage scoring, regression detection.
+
+### Safe Self-Correction
+All changes flow through graduated modes: `detect_only` → `propose` → `enforce`. Apply engine with snapshot, receipt, DIFF, and automatic rollback on validation failure.
+
+### Lexical Recall
+Field-weighted TF-IDF search across all memory. Zero dependencies. Fast and deterministic.
+
+### Vector Recall (optional)
+Pluggable embedding backend — local (Qdrant + Ollama) or cloud (Pinecone). Falls back to TF-IDF when unavailable.
+
+### Auto-Capture (safe)
+Session-end hook detects decision-like language and writes to `SIGNALS.md` only. Never touches source of truth directly. All signals go through `/apply`.
+
+### 80+ Structural Checks
+`validate.sh` checks schemas, cross-references, ID formats, status values, supersede chains, ConstraintSignatures, and more.
+
+### Audit Trail
+Every applied proposal logged with timestamp, receipt, and DIFF. Full traceability from signal → proposal → decision.
 
 ---
 
 ## Quick Start
 
-### 1. Clone into your OpenClaw workspace
+### 1. Clone
 
 ```bash
 cd /path/to/your/openclaw/workspace
 git clone https://github.com/star-ga/mem-os.git .mem-os
 ```
 
-### 2. Initialize memory structure
+### 2. Initialize
 
 ```bash
 python3 .mem-os/scripts/init_workspace.py .
 ```
 
-This scaffolds all directories, copies templates, and creates `mem-os.json`. Never overwrites existing files.
+Creates 12 directories, 19 template files, and `mem-os.json` config. **Never overwrites existing files.**
 
-### 3. Run your first integrity scan
+### 3. First scan
 
 ```bash
 python3 maintenance/intel_scan.py .
 ```
 
-You should see `0 critical | 0 warnings` on a fresh workspace.
+Expected output: `0 critical | 0 warnings` on a fresh workspace.
 
-### 4. Validate structure
+### 4. Validate
 
 ```bash
 bash maintenance/validate.sh .
 ```
 
-80+ structural checks. All should pass on a fresh init.
+80+ structural checks. All pass on fresh init.
 
-### 5. Add skills to OpenClaw config (optional)
-
-Copy the skills into your OpenClaw skills directory:
+### 5. Add skills (optional)
 
 ```bash
 cp -r .mem-os/skills/* .claude/skills/ 2>/dev/null || true
 ```
 
-This gives you `/scan`, `/apply`, and `/recall` commands.
+Gives you `/scan`, `/apply`, and `/recall` commands.
 
 ### 6. Add hooks (optional)
 
-Add to your `.claude/hooks.json` or merge with existing:
+Merge into your `.claude/hooks.json`:
 
 ```json
 {
@@ -159,25 +145,27 @@ Add to your `.claude/hooks.json` or merge with existing:
 }
 ```
 
-### 7. Verify it works
+### 7. Verify
 
 ```bash
 python3 scripts/recall.py --query "test" --workspace .
-# Should return: No results found. (empty workspace)
+# → No results found. (empty workspace — correct)
 
 python3 scripts/capture.py .
-# Should return: capture: no daily log for YYYY-MM-DD, nothing to scan
+# → capture: no daily log for YYYY-MM-DD, nothing to scan (correct)
 ```
 
-You're live. Start in `detect_only` mode for the first week, then move to `propose`.
+You're live. Start in `detect_only` for one week, then move to `propose`.
 
 ---
 
 ## Commands
 
-- `/scan` — Run integrity scan (contradictions, drift, dead decisions, impact graph)
-- `/apply` — Review and apply proposals from scan results
-- `/recall` — Search across all memory files
+| Command | What it does |
+|---|---|
+| `/scan` | Run integrity scan — contradictions, drift, dead decisions, impact graph, snapshot, briefing |
+| `/apply` | Review and apply proposals from scan results (dry-run first, then apply) |
+| `/recall <query>` | Search across all memory files with ranked results |
 
 ---
 
@@ -187,16 +175,21 @@ You're live. Start in `detect_only` mode for the first week, then move to `propo
 your-workspace/
 ├── mem-os.json              # Config
 ├── MEMORY.md                # Protocol rules
-├── decisions/DECISIONS.md   # Formal decisions [D-YYYYMMDD-###]
-├── tasks/TASKS.md           # Tasks [T-YYYYMMDD-###]
+│
+├── decisions/
+│   └── DECISIONS.md         # Formal decisions [D-YYYYMMDD-###]
+├── tasks/
+│   └── TASKS.md             # Tasks [T-YYYYMMDD-###]
 ├── entities/
-│   ├── projects.md          # Projects [PRJ-###]
-│   ├── people.md            # People [PER-###]
-│   ├── tools.md             # Tools [TOOL-###]
-│   └── incidents.md         # Incidents [INC-###]
+│   ├── projects.md          # [PRJ-###]
+│   ├── people.md            # [PER-###]
+│   ├── tools.md             # [TOOL-###]
+│   └── incidents.md         # [INC-###]
+│
 ├── memory/
 │   ├── YYYY-MM-DD.md        # Daily logs (append-only)
-│   └── intel-state.json     # Scanner state
+│   └── intel-state.json     # Scanner state + metrics
+│
 ├── intelligence/
 │   ├── CONTRADICTIONS.md    # Detected contradictions
 │   ├── DRIFT.md             # Drift detections
@@ -206,18 +199,108 @@ your-workspace/
 │   ├── AUDIT.md             # Applied proposal audit trail
 │   ├── SCAN_LOG.md          # Scan history
 │   └── proposed/            # Staged proposals
-├── summaries/
-│   └── weekly/              # Weekly summaries
+│       ├── DECISIONS_PROPOSED.md
+│       ├── TASKS_PROPOSED.md
+│       └── EDITS_PROPOSED.md
+│
 └── maintenance/
     ├── intel_scan.py         # Integrity scanner
     ├── apply_engine.py       # Proposal apply engine
     ├── block_parser.py       # Markdown block parser
-    └── validate.sh           # Structural validator
+    └── validate.sh           # Structural validator (80+ checks)
 ```
+
+---
+
+## How It Compares
+
+| Capability | Mem0 | Supermemory | claude-mem | **Mem OS** |
+|---|:---:|:---:|:---:|:---:|
+| Persist memory | Yes | Yes | Yes | **Yes** |
+| Semantic recall | Cloud | Cloud | Local | **Local + optional cloud** |
+| Auto-capture | Auto-write | Auto-write | Manual | **Proposal-based (safe)** |
+| Contradiction detection | No | No | No | **Yes** |
+| Drift analysis | No | No | No | **Yes** |
+| Integrity validation | No | No | No | **80+ checks** |
+| Safe apply + rollback | No | No | No | **Yes** |
+| Audit trail | No | Partial | No | **Full** |
+| Mode governance | No | No | No | **3 modes** |
+| Local-only operation | No | No | Yes | **Yes** |
+| Zero dependencies | No | No | No | **Yes** |
+
+---
+
+## Recall
+
+### Default: Lexical (TF-IDF)
+
+```bash
+python3 scripts/recall.py --query "authentication" --workspace .
+python3 scripts/recall.py --query "auth" --json --limit 5 --workspace .
+python3 scripts/recall.py --query "deadline" --active-only --workspace .
+```
+
+Field-weighted TF-IDF with boosts for recency, active status, and priority. Searches across all structured files. Zero dependencies.
+
+### Optional: Vector (pluggable)
+
+Set in `mem-os.json`:
+
+```json
+{
+  "recall": {
+    "backend": "vector",
+    "vector": {
+      "provider": "qdrant",
+      "model": "all-MiniLM-L6-v2",
+      "url": "http://localhost:6333"
+    }
+  }
+}
+```
+
+Implement `RecallBackend` interface in `scripts/recall_vector.py`. Falls back to TF-IDF automatically if vector backend is unavailable.
+
+---
+
+## Auto-Capture
+
+```
+Session end
+    ↓
+capture.py scans daily log
+    ↓
+Detects decision-like language (16 patterns)
+    ↓
+Writes to intelligence/SIGNALS.md ONLY
+    ↓
+User reviews signals
+    ↓
+/apply promotes to DECISIONS.md or TASKS.md
+```
+
+**Safety guarantee:** `capture.py` never writes to `decisions/` or `tasks/` directly. All signals must go through the apply engine to become formal blocks.
+
+---
+
+## Governance Modes
+
+| Mode | What it does | When to use |
+|---|---|---|
+| `detect_only` | Scan + validate + report only | **Start here.** First week after install. |
+| `propose` | Report + generate fix proposals in `proposed/` | After a clean observation week with zero critical issues. |
+| `enforce` | Bounded auto-supersede + self-healing within constraints | Production mode. Requires explicit opt-in. |
+
+**Recommended rollout:**
+1. Install → run in `detect_only` for 7 days
+2. Review scan logs → if clean, switch to `propose`
+3. Triage proposals for 2-3 weeks → if confident, enable `enforce`
+
+---
 
 ## Block Format
 
-All structured data uses a simple markdown format:
+All structured data uses a simple, parseable markdown format:
 
 ```markdown
 ## [D-20260213-001]
@@ -226,38 +309,73 @@ Status: active
 Statement: Use PostgreSQL for the user database
 Tags: database, infrastructure
 Rationale: Better JSON support than MySQL for our use case
+ConstraintSignature:
+  axis.key: database.engine
+  relation: must_be
+  object: postgresql
+  enforcement: hard
+  domain: infrastructure
 ```
 
-Blocks are parsed by `block_parser.py` which extracts key-value pairs from markdown headers.
-
----
-
-## Governance modes (recommended rollout)
-
-1. **detect_only** — Scan + validate + report only. Start here.
-2. **propose** — Generate fix proposals into `intelligence/proposed/` (no auto-apply). Move here after a clean observation week.
-3. **enforce** — Bounded auto-supersede and self-healing within invariant constraints. Production mode.
+Blocks are parsed by `block_parser.py` — a zero-dependency markdown parser that extracts `[ID]` headers and `Key: Value` fields into structured dicts.
 
 ---
 
 ## Configuration
 
-See `mem-os.example.json` for all options:
+All settings in `mem-os.json` (created by `init_workspace.py`):
 
-- `auto_capture` — Run capture engine on session end (default: true)
-- `auto_recall` — Enable recall on session start (default: true)
-- `self_correcting_mode` — "detect_only", "propose", or "enforce"
-- `recall.backend` — "tfidf" (default) or "vector" (requires recall_vector.py)
-- `recall.vector` — Vector backend config (provider, model, url, collection)
-- `proposal_budget` — Limits on auto-generated proposals per run/day
-- `scan_schedule` — "daily" or "manual"
+```json
+{
+  "version": "1.0.0",
+  "auto_capture": true,
+  "auto_recall": true,
+  "self_correcting_mode": "detect_only",
+  "recall": {
+    "backend": "tfidf",
+    "vector": {
+      "provider": "qdrant",
+      "model": "all-MiniLM-L6-v2",
+      "url": "http://localhost:6333"
+    }
+  },
+  "proposal_budget": {
+    "per_run": 3,
+    "per_day": 6,
+    "backlog_limit": 30
+  },
+  "scan_schedule": "daily"
+}
+```
+
+| Key | Default | Description |
+|---|---|---|
+| `auto_capture` | `true` | Run capture engine on session end |
+| `auto_recall` | `true` | Show recall context on session start |
+| `self_correcting_mode` | `"detect_only"` | Governance mode |
+| `recall.backend` | `"tfidf"` | `"tfidf"` or `"vector"` |
+| `proposal_budget.per_run` | `3` | Max proposals generated per scan |
+| `proposal_budget.per_day` | `6` | Max proposals per day |
+| `scan_schedule` | `"daily"` | `"daily"` or `"manual"` |
+
+---
 
 ## Requirements
 
-- Python 3.8+
-- Bash (for hooks and validate.sh)
-- No external packages required
+- **Python 3.8+**
+- **Bash** (for hooks and validate.sh)
+- **No external packages** — stdlib only
+
+---
+
+## Contributing
+
+Contributions welcome. Please open an issue first to discuss what you'd like to change.
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
+---
 
 ## License
 
-MIT License. Copyright 2026 STARGA Inc.
+[MIT](LICENSE) — Copyright 2026 STARGA Inc.
