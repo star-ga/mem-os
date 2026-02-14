@@ -214,19 +214,68 @@ your-workspace/
 
 ## How It Compares
 
-| Capability | Mem0 | Supermemory | claude-mem | **Mem OS** |
-|---|:---:|:---:|:---:|:---:|
-| Persist memory | Yes | Yes | Yes | **Yes** |
-| Semantic recall | Cloud | Cloud | Local | **Local + optional cloud** |
-| Auto-capture | Auto-write | Auto-write | Manual | **Proposal-based (safe)** |
-| Contradiction detection | No | No | No | **Yes** |
-| Drift analysis | No | No | No | **Yes** |
-| Integrity validation | No | No | No | **80+ checks** |
-| Safe apply + rollback | No | No | No | **Yes** |
-| Audit trail | No | Partial | No | **Full** |
-| Mode governance | No | No | No | **3 modes** |
-| Local-only operation | No | No | Yes | **Yes** |
-| Zero dependencies | No | No | No | **Yes** |
+### Full Feature Matrix
+
+Compared against every major memory solution for AI agents (as of 2026):
+
+| Capability | [Mem0](https://github.com/mem0ai/mem0) | [Supermemory](https://supermemory.ai) | [claude-mem](https://github.com/thedotmack/claude-mem) | [Letta](https://www.letta.com) | [Zep](https://www.getzep.com) | [LangMem](https://github.com/langchain-ai) | [Cognee](https://www.cognee.ai) | [Graphlit](https://www.graphlit.com) | **Mem OS** |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| **Recall & Search** | | | | | | | | | |
+| Semantic recall (vector) | Cloud | Cloud | ChromaDB | Yes | Yes | Yes | Yes | Yes | **Optional (local/cloud)** |
+| Lexical recall (keyword) | Filter | No | No | No | No | No | No | No | **TF-IDF with field boosts** |
+| Graph-based recall | Yes | No | No | No | Yes | No | Yes | Yes | Planned |
+| Hybrid search | Partial | No | No | No | Yes | No | Yes | Yes | **TF-IDF + optional vector** |
+| **Memory Persistence** | | | | | | | | | |
+| Structured memory | JSON | JSON | SQLite | Memory blocks | Graph | KV store | Graph | Graph | **Markdown blocks** |
+| Entity tracking | Yes | Yes | No | Yes | Yes | Yes | Yes | Yes | **Yes (people/projects/tools)** |
+| Temporal awareness | No | No | No | No | Yes | No | No | No | **Yes (date-indexed)** |
+| Supersede chains | No | No | No | Yes | Yes | No | No | No | **Yes (never edit, supersede)** |
+| Append-only logs | No | No | No | No | No | No | No | No | **Yes (daily logs)** |
+| **Integrity & Safety** | | | | | | | | | |
+| Contradiction detection | No | No | No | No | No | No | No | No | **Yes (ConstraintSignatures)** |
+| Drift analysis | No | No | No | No | No | No | No | No | **Yes (dead decisions, orphans)** |
+| Structural validation | No | No | No | No | No | No | No | No | **80+ checks** |
+| Impact graph | No | No | No | No | No | No | No | No | **Yes (decision → task/entity)** |
+| Coverage scoring | No | No | No | No | No | No | No | No | **Yes (% decisions enforced)** |
+| Provenance gate | No | No | No | No | Partial | No | No | No | **Yes (no source = no claim)** |
+| **Self-Correction** | | | | | | | | | |
+| Auto-capture | Auto-write | Auto-write | Auto-write | Self-edit | Auto-extract | Auto-extract | Auto-extract | Auto-ingest | **Proposal-based (safe)** |
+| Proposal queue | No | No | No | No | No | No | No | No | **Yes (proposed/)** |
+| Apply with rollback | No | No | No | No | No | No | No | No | **Yes (snapshot + DIFF)** |
+| Mode governance | No | No | No | No | No | No | No | No | **3 modes** |
+| Audit trail | No | Partial | No | No | No | No | No | No | **Full (every apply logged)** |
+| **Operations** | | | | | | | | | |
+| Local-only operation | No | No | Yes | No | No | No | No | No | **Yes** |
+| Zero dependencies | No | No | No | No | No | No | No | No | **Yes (stdlib only)** |
+| No daemon required | No | No | No | No | No | Yes | No | No | **Yes (just files + scripts)** |
+| Git-friendly (plain text) | No | No | No | Partial | No | No | No | No | **Yes (all Markdown)** |
+| OpenClaw native | No | Plugin | Plugin | No | No | Plugin | No | No | **Yes (hooks + skills)** |
+
+### What Each Tool Does Best
+
+| Tool | Strength | Trade-off |
+|---|---|---|
+| **Mem0** | Fast managed service, graph memory, multi-user scoping | Cloud-dependent, no integrity checking |
+| **Supermemory** | Fastest retrieval (ms), auto-ingestion from Drive/Notion | Cloud-dependent, auto-writes without review |
+| **claude-mem** | Purpose-built for Claude Code, ChromaDB vectors, lifecycle hooks | Requires ChromaDB + Express worker, no integrity |
+| **Letta** | Self-editing memory blocks, sleep-time compute, skill learning | Full agent runtime (heavy), not just memory |
+| **Zep** | Temporal knowledge graph, bi-temporal model, sub-second at scale | Cloud service, complex architecture |
+| **LangMem** | Native LangChain/LangGraph integration | Tied to LangChain ecosystem |
+| **Cognee** | Advanced chunking, web content bridging | Research-oriented, complex setup |
+| **Graphlit** | Multimodal ingestion, semantic search, managed platform | Cloud-only, managed service |
+| **Mem OS** | Integrity + self-correction + zero deps + local-first | Lexical recall by default (vector optional) |
+
+### The Gap Mem OS Fills
+
+Every tool above does **storage + retrieval**. None of them answer:
+
+- "Do any of my decisions contradict each other?"
+- "Which decisions are active but nobody references anymore?"
+- "Did I make a decision in chat that was never formalized?"
+- "What's the downstream impact if I change this decision?"
+- "Is my memory state structurally valid right now?"
+
+**Mem OS is the only memory system with an immune system.**
 
 ---
 
