@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 """mem-os Auto-Capture Engine. Zero external deps.
 
+SAFETY: This engine ONLY writes to intelligence/SIGNALS.md.
+It NEVER writes to decisions/DECISIONS.md or tasks/TASKS.md directly.
+All captured signals must go through /apply to become formal blocks.
+This prevents memory poisoning from automated extraction errors.
+
 Scans today's daily log for decision-like language not cross-referenced
 to a formal D-/T- block. Appends signals to intelligence/SIGNALS.md.
 

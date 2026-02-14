@@ -6,7 +6,9 @@ Most memory plugins store and retrieve. mem-os also detects contradictions, catc
 
 ## What It Does
 
-**Recall** — TF-IDF search across all structured memory (decisions, tasks, entities, incidents)
+**Recall (two-layer)** —
+- Default: TF-IDF lexical search (zero deps, fast, predictable)
+- Optional: vector/embedding backend (local Qdrant or Pinecone) for semantic similarity
 
 **Integrity** — Automated detection of:
 - Contradictions between decisions
@@ -20,7 +22,7 @@ Most memory plugins store and retrieve. mem-os also detects contradictions, catc
 - `propose` — Report + generate fix proposals
 - `apply` — Auto-apply approved fixes with rollback
 
-**Auto-Capture** — Session-end hook scans daily logs for decision-like language that wasn't formalized, appends signals for review
+**Auto-Capture (safe)** — Session-end hook scans daily logs for decision-like language that wasn't formalized. Writes to `intelligence/SIGNALS.md` only (never to DECISIONS/TASKS directly). All captured signals go through `/apply` before becoming formal blocks — no memory poisoning.
 
 ## Quick Start
 
@@ -97,13 +99,13 @@ your-workspace/
 - No structural validation
 
 **mem-os**:
-- Everything above PLUS integrity checking
-- Detects when decisions contradict each other
-- Catches decisions made informally but never formalized
-- Finds dead decisions nobody references anymore
-- Self-correcting with graduated autonomy and rollback safety
+- Recall: TF-IDF default + optional vector backend (not sold as "vector" without one)
+- Integrity: detects contradictions, drift, dead decisions, orphan tasks
+- Self-correction: graduated autonomy with rollback safety
+- Safe capture: auto-detect unfiled decisions, never write to source of truth directly
 - Structural validation with 80+ checks
-- Zero external dependencies (Python 3.8+ stdlib only)
+- Zero external dependencies for core (Python 3.8+ stdlib only)
+- Vector backends optional — Qdrant (local) or Pinecone (cloud), graceful fallback to TF-IDF
 
 ## Block Format
 
@@ -127,6 +129,8 @@ See `mem-os.example.json` for all options:
 - `auto_capture` — Run capture engine on session end (default: true)
 - `auto_recall` — Enable recall on session start (default: true)
 - `self_correcting_mode` — "detect_only", "propose", or "apply"
+- `recall.backend` — "tfidf" (default) or "vector" (requires recall_vector.py)
+- `recall.vector` — Vector backend config (provider, model, url, collection)
 - `proposal_budget` — Limits on auto-generated proposals per run/day
 - `scan_schedule` — "daily" or "manual"
 

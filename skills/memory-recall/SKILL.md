@@ -1,6 +1,6 @@
 # /recall — Memory Search
 
-Search across all structured memory files using TF-IDF scoring. Returns ranked results with block ID, type, score, excerpt, and file path.
+Lexical search across all structured memory files. Default backend: TF-IDF with field boosts and recency weighting. Optional: vector/embedding backend (configure in mem-os.json). Returns ranked results with block ID, type, score, excerpt, and file path.
 
 ## When to Use
 - Before making decisions (check if a similar decision already exists)

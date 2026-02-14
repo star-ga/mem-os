@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
-"""mem-os Semantic Recall Engine. Zero external deps.
+"""mem-os Lexical Recall Engine (TF-IDF). Zero external deps.
 
-Searches across all structured memory files using TF-IDF-like scoring.
-Returns ranked results with block ID, type, score, excerpt, and file path.
+Default recall backend: ranked keyword search using TF-IDF scoring
+with field boosts and recency weighting. Fast, predictable, no deps.
+
+For semantic recall (embeddings), see RecallBackend interface below.
+Optional vector backends (Qdrant/Pinecone) can be plugged in via config.
 
 Usage:
     python3 scripts/recall.py --query "authentication" --workspace "."
@@ -16,10 +19,35 @@ import math
 import os
 import re
 import sys
+from abc import ABC, abstractmethod
 from collections import Counter
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from block_parser import parse_file, get_active
+
+
+# ---------------------------------------------------------------------------
+# RecallBackend interface — plug in vector/semantic backends here
+# ---------------------------------------------------------------------------
+
+class RecallBackend(ABC):
+    """Interface for recall backends. Default: TFIDFBackend (below).
+
+    To add a vector backend:
+    1. Implement this interface in recall_vector.py
+    2. Set recall.backend = "vector" in mem-os.json
+    3. recall.py will load it dynamically, falling back to TF-IDF on error.
+    """
+
+    @abstractmethod
+    def search(self, workspace, query, limit=10, active_only=False):
+        """Return list of {_id, type, score, excerpt, file, line, status}."""
+        ...
+
+    @abstractmethod
+    def index(self, workspace):
+        """(Re)build index from workspace files."""
+        ...
 
 
 # Fields to index for search (in priority order)
@@ -200,8 +228,27 @@ def recall(workspace, query, limit=10, active_only=False):
     return results[:limit]
 
 
+def _load_backend(workspace):
+    """Load recall backend from config. Falls back to TF-IDF."""
+    config_path = os.path.join(workspace, "mem-os.json")
+    if os.path.isfile(config_path):
+        try:
+            with open(config_path) as f:
+                cfg = json.load(f)
+            backend = cfg.get("recall", {}).get("backend", "tfidf")
+            if backend == "vector":
+                try:
+                    from recall_vector import VectorBackend
+                    return VectorBackend(cfg.get("recall", {}))
+                except ImportError:
+                    pass  # fall through to TF-IDF
+        except Exception:
+            pass
+    return None  # use built-in TF-IDF
+
+
 def main():
-    parser = argparse.ArgumentParser(description="mem-os Semantic Recall Engine")
+    parser = argparse.ArgumentParser(description="mem-os Lexical Recall Engine")
     parser.add_argument("--query", "-q", required=True, help="Search query")
     parser.add_argument("--workspace", "-w", default=".", help="Workspace path")
     parser.add_argument("--limit", "-l", type=int, default=10, help="Max results")
@@ -209,7 +256,15 @@ def main():
     parser.add_argument("--json", action="store_true", help="Output as JSON")
     args = parser.parse_args()
 
-    results = recall(args.workspace, args.query, args.limit, args.active_only)
+    # Try vector backend first, fall back to TF-IDF
+    backend = _load_backend(args.workspace)
+    if backend:
+        try:
+            results = backend.search(args.workspace, args.query, args.limit, args.active_only)
+        except Exception:
+            results = recall(args.workspace, args.query, args.limit, args.active_only)
+    else:
+        results = recall(args.workspace, args.query, args.limit, args.active_only)
 
     if args.json:
         print(json.dumps(results, indent=2))

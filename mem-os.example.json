@@ -4,9 +4,14 @@
   "auto_capture": true,
   "auto_recall": true,
   "self_correcting_mode": "detect_only",
-  "semantic_search": {
-    "enabled": false,
-    "provider": "local"
+  "recall": {
+    "backend": "tfidf",
+    "vector": {
+      "provider": "qdrant",
+      "model": "all-MiniLM-L6-v2",
+      "url": "http://localhost:6333",
+      "collection": "mem-os"
+    }
   },
   "proposal_budget": {
     "per_run": 3,
