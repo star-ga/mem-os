@@ -561,6 +561,17 @@ fi
 # V2.8: intelligence/proposed/ directory exists
 if [[ -d "$WS/intelligence/proposed" ]]; then
   pass "V2.8: intelligence/proposed/ directory exists"
+  # V2.9: Staged proposals must have Fingerprint field
+  for pfile in "$WS"/intelligence/proposed/*_PROPOSED.md; do
+    [[ -f "$pfile" ]] || continue
+    staged_count=$(grep -c "^Status: staged" "$pfile" 2>/dev/null || echo 0)
+    fp_count=$(grep -c "^Fingerprint: " "$pfile" 2>/dev/null || echo 0)
+    if [[ "$staged_count" -gt 0 && "$fp_count" -lt "$staged_count" ]]; then
+      warn "V2.9: $(basename "$pfile") has staged proposals missing Fingerprint field"
+    elif [[ "$staged_count" -gt 0 ]]; then
+      pass "V2.9: $(basename "$pfile") staged proposals have Fingerprint"
+    fi
+  done
 else
   warn "V2.8: intelligence/proposed/ directory MISSING"
 fi

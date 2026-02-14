@@ -134,19 +134,28 @@ Proposals are staged mutations that require explicit approval before touching so
 
 ```ebnf
 Proposal      ::= Header NewLine ProposalBody
-ProposalBody  ::= ProposalType NewLine
+ProposalBody  ::= ProposalId NewLine
+                  ProposalType NewLine
                   ProposalTarget NewLine
-                  ProposalAction NewLine
+                  ProposalRisk NewLine
                   ProposalReason NewLine
+                  ProposalRollback NewLine
+                  ProposalAction NewLine
+                  ProposalFingerprint NewLine
                   ProposalStatus NewLine
-                  { ProposalField NewLine }
+                  ProposalSources NewLine
 
-ProposalType  ::= "Type:" Space ("decision" | "task" | "edit")
+ProposalId     ::= "ProposalId:" Space ID
+ProposalType   ::= "Type:" Space ("decision" | "task" | "edit")
 ProposalTarget ::= "TargetBlock:" Space BlockID
-ProposalAction ::= "Ops:" Space OpsBlock
+ProposalRisk   ::= "Risk:" Space ("low" | "medium" | "high" | "critical")
 ProposalReason ::= "Evidence:" Space EvidenceList
+ProposalRollback ::= "Rollback:" Space ("restore_snapshot" | "manual")
+ProposalAction ::= "Ops:" Space OpsBlock
+ProposalFingerprint ::= "Fingerprint:" Space HexString16
 ProposalStatus ::= "Status:" Space ("staged" | "applied" | "rejected"
                   | "deferred" | "expired" | "rolled_back")
+ProposalSources ::= "Sources:" Space SourceList
 ```
 
 ### Proposal Invariants
@@ -241,7 +250,7 @@ The apply engine provides ACID-like guarantees for memory mutations.
 4. **Rollback on failure**: If validation fails, all files revert to pre-apply state
 5. **Receipt required**: Every apply produces an `APPLY_RECEIPT.md` in its snapshot directory (`intelligence/applied/<timestamp>/`)
 6. **No cascade**: One proposal per apply. No proposal may trigger another proposal
-7. **Snapshot scope**: Snapshots include workspace state directories (`decisions`, `tasks`, `entities`, `summaries`, `memory`) and intelligence files. Excluded: `maintenance/` (transient reports), `intelligence/applied/` (prevents recursive nesting)
+7. **Snapshot scope**: Snapshots include workspace state directories (`decisions`, `tasks`, `entities`, `summaries`, `memory`), root-level files (`AGENTS.md`, `MEMORY.md`, `IDENTITY.md`), and `intelligence/` files copied individually. Excluded: `maintenance/` (transient reports), `intelligence/applied/` (prevents recursive nesting)
 
 ### Apply Receipt Format
 
