@@ -1,0 +1,21 @@
+{
+  "name": "mem-os",
+  "version": "1.0.0",
+  "description": "Memory operating system with integrity checking — recall PLUS immune system for your AI workspace",
+  "author": {
+    "name": "STARGA Inc",
+    "url": "https://star.ga"
+  },
+  "repository": "https://github.com/star-ga/mem-os",
+  "license": "MIT",
+  "keywords": [
+    "memory",
+    "integrity",
+    "intelligence",
+    "decisions",
+    "recall",
+    "contradiction-detection",
+    "drift-analysis",
+    "self-correcting"
+  ]
+}

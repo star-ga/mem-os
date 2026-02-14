@@ -1,0 +1,17 @@
+{
+  "version": "1.0.0",
+  "workspace_path": ".",
+  "auto_capture": true,
+  "auto_recall": true,
+  "self_correcting_mode": "detect_only",
+  "semantic_search": {
+    "enabled": false,
+    "provider": "local"
+  },
+  "proposal_budget": {
+    "per_run": 3,
+    "per_day": 6,
+    "backlog_limit": 30
+  },
+  "scan_schedule": "daily"
+}

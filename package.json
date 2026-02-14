@@ -1,0 +1,16 @@
+{
+  "name": "mem-os",
+  "version": "1.0.0",
+  "private": false,
+  "description": "Memory OS plugin — structured memory + integrity immune system for AI agents",
+  "author": "STARGA Inc <noreply@star.ga>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/star-ga/mem-os.git"
+  },
+  "engines": {
+    "python": ">=3.8"
+  },
+  "dependencies": {}
+}
