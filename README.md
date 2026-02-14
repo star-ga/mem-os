@@ -411,12 +411,20 @@ Status: active
 Statement: Use PostgreSQL for the user database
 Tags: database, infrastructure
 Rationale: Better JSON support than MySQL for our use case
-ConstraintSignature:
-  axis.key: database.engine
-  relation: must_be
-  object: postgresql
-  enforcement: hard
+ConstraintSignatures:
+- id: CS-db-engine
   domain: infrastructure
+  subject: database
+  predicate: engine
+  object: postgresql
+  modality: must
+  priority: 9
+  scope: {projects: [PRJ-myapp]}
+  evidence: Benchmarked JSON performance
+  axis:
+    key: database.engine
+  relation: standalone
+  enforcement: structural
 ```
 
 Blocks are parsed by `block_parser.py` — a zero-dependency markdown parser that extracts `[ID]` headers and `Key: Value` fields into structured dicts.

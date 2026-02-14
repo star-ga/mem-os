@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Tests for intel_scan.py — contradiction detection, drift analysis, impact graph."""
 
+import json
 import os
 import sys
 import tempfile
@@ -10,7 +11,10 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
 from intel_scan import (
     IntelReport, detect_contradictions, detect_drift, scopes_overlap,
     check_signature_conflict, get_axis_key, load_all, build_impact_graph,
+    generate_proposals,
 )
+from apply_engine import validate_proposal
+from block_parser import parse_file
 
 
 class TestIntelReport(unittest.TestCase):
@@ -101,6 +105,50 @@ class TestCheckSignatureConflict(unittest.TestCase):
         self.assertIsNone(check_signature_conflict(s1, s2))
 
 
+class TestCheckSignatureConflictCompeting(unittest.TestCase):
+    """Tests for competing hard requirements (same axis, same predicate, different objects)."""
+
+    def test_competing_must_different_objects_is_critical(self):
+        """Two 'must use X' vs 'must use Y' on same axis = critical."""
+        s1 = {"id": "CS-001", "axis": {"key": "db.primary"}, "modality": "must",
+               "scope": {}, "predicate": "use", "object": "PostgreSQL"}
+        s2 = {"id": "CS-002", "axis": {"key": "db.primary"}, "modality": "must",
+               "scope": {}, "predicate": "use", "object": "MySQL"}
+        result = check_signature_conflict(s1, s2)
+        self.assertIsNotNone(result)
+        self.assertEqual(result["severity"], "critical")
+        self.assertIn("competing hard requirements", result["reason"])
+
+    def test_competing_must_not_different_objects_is_critical(self):
+        """Two 'must_not allow X' vs 'must_not allow Y' = critical (only if meaningful)."""
+        s1 = {"id": "CS-001", "axis": {"key": "auth.session"}, "modality": "must_not",
+               "scope": {}, "predicate": "allow", "object": "plaintext_cookies"}
+        s2 = {"id": "CS-002", "axis": {"key": "auth.session"}, "modality": "must_not",
+               "scope": {}, "predicate": "allow", "object": "insecure_tokens"}
+        result = check_signature_conflict(s1, s2)
+        self.assertIsNotNone(result)
+        self.assertEqual(result["severity"], "critical")
+
+    def test_competing_should_different_objects_is_low(self):
+        """Two soft requirements with different objects = low severity."""
+        s1 = {"id": "CS-001", "axis": {"key": "style.format"}, "modality": "should",
+               "scope": {}, "predicate": "use", "object": "tabs"}
+        s2 = {"id": "CS-002", "axis": {"key": "style.format"}, "modality": "should",
+               "scope": {}, "predicate": "use", "object": "spaces"}
+        result = check_signature_conflict(s1, s2)
+        self.assertIsNotNone(result)
+        self.assertEqual(result["severity"], "low")
+
+    def test_same_predicate_same_object_no_conflict(self):
+        """Same modality, same predicate, same object = agreement, not conflict."""
+        s1 = {"id": "CS-001", "axis": {"key": "db.primary"}, "modality": "must",
+               "scope": {}, "predicate": "use", "object": "PostgreSQL"}
+        s2 = {"id": "CS-002", "axis": {"key": "db.primary"}, "modality": "must",
+               "scope": {}, "predicate": "use", "object": "PostgreSQL"}
+        result = check_signature_conflict(s1, s2)
+        self.assertIsNone(result)
+
+
 class TestDetectContradictions(unittest.TestCase):
     def test_no_active_decisions(self):
         report = IntelReport()
@@ -129,6 +177,30 @@ class TestDetectContradictions(unittest.TestCase):
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0]["severity"], "critical")
 
+    def test_detects_competing_hard_requirements(self):
+        """Two active decisions with must+must same predicate, different objects."""
+        decisions = [
+            {
+                "_id": "D-20260214-001", "Status": "active",
+                "ConstraintSignatures": [
+                    {"id": "CS-010", "axis": {"key": "db.primary"}, "modality": "must",
+                     "scope": {}, "predicate": "use", "object": "PostgreSQL", "priority": 5}
+                ]
+            },
+            {
+                "_id": "D-20260214-002", "Status": "active",
+                "ConstraintSignatures": [
+                    {"id": "CS-011", "axis": {"key": "db.primary"}, "modality": "must",
+                     "scope": {}, "predicate": "use", "object": "MySQL", "priority": 3}
+                ]
+            },
+        ]
+        report = IntelReport()
+        result = detect_contradictions(decisions, report)
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["severity"], "critical")
+        self.assertIn("competing", result[0]["reason"])
+
 
 class TestDetectDrift(unittest.TestCase):
     def test_no_drift_on_empty(self):
@@ -155,6 +227,108 @@ class TestLoadAll(unittest.TestCase):
             data = load_all(td)
             for key in data:
                 self.assertEqual(data[key], [])
+
+
+class TestE2EProposalToApply(unittest.TestCase):
+    """End-to-end: generate_proposals → validate_proposal pipeline."""
+
+    def _scaffold_workspace(self, td):
+        """Create minimal workspace structure for proposal generation."""
+        os.makedirs(os.path.join(td, "decisions"), exist_ok=True)
+        os.makedirs(os.path.join(td, "intelligence/proposed"), exist_ok=True)
+        os.makedirs(os.path.join(td, "maintenance"), exist_ok=True)
+
+        # Empty proposed file for generate_proposals to append to
+        with open(os.path.join(td, "intelligence/proposed/DECISIONS_PROPOSED.md"), "w") as f:
+            f.write("# Proposed Decisions\n\n")
+
+        # Config with proposal mode enabled
+        with open(os.path.join(td, "mem-os.json"), "w") as f:
+            json.dump({
+                "mode": "propose",
+                "proposal_budget": {"per_run": 3, "per_day": 6, "backlog_limit": 30}
+            }, f)
+
+        # Intel state
+        with open(os.path.join(td, "intelligence/intel-state.json"), "w") as f:
+            json.dump({"mode": "propose", "counters": {}}, f)
+
+        return td
+
+    def test_generated_proposals_pass_validation(self):
+        """Proposals from generate_proposals() must pass validate_proposal()."""
+        with tempfile.TemporaryDirectory() as td:
+            self._scaffold_workspace(td)
+
+            # Create contradictions that generate_proposals will act on
+            contradictions = [{
+                "sig1": {
+                    "decision": "D-20260214-001",
+                    "sig": {"id": "CS-010", "axis": {"key": "db"}, "modality": "must",
+                            "predicate": "use", "object": "PostgreSQL", "priority": 5}
+                },
+                "sig2": {
+                    "decision": "D-20260214-002",
+                    "sig": {"id": "CS-011", "axis": {"key": "db"}, "modality": "must",
+                            "predicate": "use", "object": "MySQL", "priority": 3}
+                },
+                "severity": "critical",
+                "reason": "competing hard requirements on axis=db",
+            }]
+
+            report = IntelReport()
+            intel_state = {"mode": "propose", "counters": {}}
+
+            count = generate_proposals(contradictions, [], td, intel_state, report)
+            self.assertEqual(count, 1)
+
+            # Parse the generated proposal file
+            proposed_path = os.path.join(td, "intelligence/proposed/DECISIONS_PROPOSED.md")
+            blocks = parse_file(proposed_path)
+
+            # Should have at least one proposal block
+            proposals = [b for b in blocks if b.get("ProposalId")]
+            self.assertGreaterEqual(len(proposals), 1)
+
+            # Each proposal must pass validate_proposal
+            for p in proposals:
+                errors = validate_proposal(p)
+                self.assertEqual(errors, [],
+                                 f"Proposal {p.get('ProposalId')} failed validation: {errors}")
+
+    def test_proposal_budget_limits_output(self):
+        """per_run budget limits the number of proposals generated."""
+        with tempfile.TemporaryDirectory() as td:
+            self._scaffold_workspace(td)
+
+            # Override per_run=1
+            with open(os.path.join(td, "mem-os.json"), "w") as f:
+                json.dump({
+                    "mode": "propose",
+                    "proposal_budget": {"per_run": 1, "per_day": 10, "backlog_limit": 30}
+                }, f)
+
+            contradictions = [
+                {
+                    "sig1": {"decision": f"D-001", "sig": {"id": "CS-A", "priority": 5}},
+                    "sig2": {"decision": f"D-002", "sig": {"id": "CS-B", "priority": 3}},
+                    "severity": "critical",
+                    "reason": "test contradiction 1",
+                },
+                {
+                    "sig1": {"decision": f"D-003", "sig": {"id": "CS-C", "priority": 5}},
+                    "sig2": {"decision": f"D-004", "sig": {"id": "CS-D", "priority": 3}},
+                    "severity": "critical",
+                    "reason": "test contradiction 2",
+                },
+            ]
+
+            report = IntelReport()
+            intel_state = {"mode": "propose", "counters": {}}
+
+            count = generate_proposals(contradictions, [], td, intel_state, report)
+            # per_run=1 should cap at 1 proposal
+            self.assertEqual(count, 1)
 
 
 if __name__ == "__main__":

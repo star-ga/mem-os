@@ -272,16 +272,23 @@ def check_signature_conflict(sig1, sig2):
     shared_predicate = sig1.get("predicate") == sig2.get("predicate")
     shared_object = sig1.get("object") == sig2.get("object")
 
-    if (shared_predicate
-            and not shared_object
-            and m1 in ("must", "must_not") and m2 in ("must", "must_not")
-            and m1 == m2):
-        if sig1.get("predicate") in ("enforces", "requires"):
+    if shared_predicate and not shared_object:
+        if m1 in ("must", "must_not") and m2 in ("must", "must_not") and m1 == m2:
+            # Two hard constraints on same axis with different objects = critical
+            return {
+                "severity": "critical",
+                "reason": (
+                    f"competing hard requirements: both {m1} "
+                    f"{sig1.get('predicate', '?')} but different objects "
+                    f"({sig1.get('object')} vs {sig2.get('object')}) on axis={ax1}"
+                ),
+            }
+        if m1 in ("should", "should_not") and m2 in ("should", "should_not") and m1 == m2:
             return {
                 "severity": "low",
                 "reason": (
-                    f"competing requirements: both {m1} on "
-                    f"{sig1['predicate']} but different objects "
+                    f"competing soft requirements: both {m1} "
+                    f"{sig1.get('predicate', '?')} but different objects "
                     f"({sig1.get('object')} vs {sig2.get('object')}) on axis={ax1}"
                 ),
             }
@@ -982,7 +989,9 @@ def generate_proposals(contradictions, drift_signals, ws, intel_state, report):
             "target": target_dec,
             "risk": "high",
             "evidence": c["reason"],
-            "action": f"Review contradiction: {c['reason']}. Consider superseding {target_dec}.",
+            "ops": [{"op": "set_status", "file": "decisions/DECISIONS.md",
+                      "target": target_dec, "status": "superseded"}],
+            "rollback": "restore_snapshot",
         })
 
     # Generate proposals from drift signals (dead decisions)
@@ -1000,7 +1009,9 @@ def generate_proposals(contradictions, drift_signals, ws, intel_state, report):
                     "target": did,
                     "risk": "medium",
                     "evidence": "Decision not referenced by any active task",
-                    "action": f"Create a task referencing {did} or supersede it.",
+                    "ops": [{"op": "set_status", "file": "decisions/DECISIONS.md",
+                              "target": did, "status": "revoked"}],
+                    "rollback": "restore_snapshot",
                 })
 
     # Write proposals to DECISIONS_PROPOSED.md
@@ -1011,13 +1022,20 @@ def generate_proposals(contradictions, drift_signals, ws, intel_state, report):
 
         new_blocks = []
         for p in proposals:
+            ops_lines = "\n".join(
+                f"- op: {op['op']}\n  file: {op['file']}\n  target: {op.get('target', '')}"
+                + (f"\n  status: {op['status']}" if 'status' in op else "")
+                for op in p.get("ops", [])
+            )
             block = (
                 f"\n[{p['id']}]\n"
+                f"ProposalId: {p['id']}\n"
                 f"Type: {p['type']}\n"
                 f"TargetBlock: {p['target']}\n"
                 f"Risk: {p['risk']}\n"
-                f"Evidence: {p['evidence']}\n"
-                f"Action: {p['action']}\n"
+                f"Evidence:\n- {p['evidence']}\n"
+                f"Rollback: {p.get('rollback', 'restore_snapshot')}\n"
+                f"Ops:\n{ops_lines}\n"
                 f"Status: staged\n"
                 f"Sources:\n"
                 f"- maintenance/intel-report.txt\n"

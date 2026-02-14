@@ -667,7 +667,7 @@ def check_backlog_limit(ws):
             continue
         blocks = parse_file(path)
         count += sum(1 for b in blocks if b.get("Status") == "staged")
-    return count, count >= limit
+    return count, count > limit
 
 
 def check_no_touch_window(ws):

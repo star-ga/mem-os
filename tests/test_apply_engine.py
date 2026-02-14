@@ -370,5 +370,57 @@ class TestModeGate(unittest.TestCase):
             self.assertIn("not found", msg.lower())
 
 
+class TestBacklogLimit(unittest.TestCase):
+    """Backlog limit uses > (not >=) — allows apply at exact limit."""
+
+    def test_at_exact_limit_not_exceeded(self):
+        """count == limit should NOT be exceeded (> not >=)."""
+        from apply_engine import check_backlog_limit
+        with tempfile.TemporaryDirectory() as ws:
+            from init_workspace import init
+            init(ws)
+            # Write exactly 3 staged proposals, set limit to 3
+            state_path = os.path.join(ws, "memory/intel-state.json")
+            with open(state_path) as f:
+                state = json.load(f)
+            state["proposal_budget"] = {"backlog_limit": 3}
+            with open(state_path, "w") as f:
+                json.dump(state, f)
+
+            # Create 3 staged proposals
+            proposed_dir = os.path.join(ws, "intelligence/proposed")
+            os.makedirs(proposed_dir, exist_ok=True)
+            with open(os.path.join(proposed_dir, "DECISIONS_PROPOSED.md"), "w") as f:
+                for i in range(3):
+                    f.write(f"\n[P-001-{i}]\nProposalId: P-001-{i}\nStatus: staged\n")
+
+            count, exceeded = check_backlog_limit(ws)
+            self.assertEqual(count, 3)
+            self.assertFalse(exceeded, "At exact limit should NOT be exceeded")
+
+    def test_over_limit_is_exceeded(self):
+        """count > limit should be exceeded."""
+        from apply_engine import check_backlog_limit
+        with tempfile.TemporaryDirectory() as ws:
+            from init_workspace import init
+            init(ws)
+            state_path = os.path.join(ws, "memory/intel-state.json")
+            with open(state_path) as f:
+                state = json.load(f)
+            state["proposal_budget"] = {"backlog_limit": 2}
+            with open(state_path, "w") as f:
+                json.dump(state, f)
+
+            proposed_dir = os.path.join(ws, "intelligence/proposed")
+            os.makedirs(proposed_dir, exist_ok=True)
+            with open(os.path.join(proposed_dir, "DECISIONS_PROPOSED.md"), "w") as f:
+                for i in range(3):
+                    f.write(f"\n[P-001-{i}]\nProposalId: P-001-{i}\nStatus: staged\n")
+
+            count, exceeded = check_backlog_limit(ws)
+            self.assertEqual(count, 3)
+            self.assertTrue(exceeded, "Over limit should be exceeded")
+
+
 if __name__ == "__main__":
     unittest.main()
