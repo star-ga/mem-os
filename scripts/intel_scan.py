@@ -634,9 +634,11 @@ def generate_briefing(data, contradictions, drift_signals, impacts, ws, report):
     active_decisions = [d for d in decisions if d.get("Status") == "active"]
     active_tasks = [t for t in tasks if t.get("Status") in ("todo", "doing")]
 
-    # Decisions this week
+    # Decisions this week (compare full date range, not just month prefix)
+    monday_str = monday.strftime("%Y-%m-%d")
+    sunday_str = sunday.strftime("%Y-%m-%d")
     week_decisions = [d for d in decisions
-                      if d.get("Date", "").startswith(monday.strftime("%Y-%m-%d")[:8])]
+                      if monday_str <= d.get("Date", "") <= sunday_str]
 
     # Done tasks
     done_tasks = [t for t in tasks if t.get("Status") == "done"]
@@ -668,7 +670,7 @@ def generate_briefing(data, contradictions, drift_signals, impacts, ws, report):
 
     briefing_lines.append("Wins:")
     recent_done = [t for t in done_tasks
-                   if any("2026-02-13" in h for h in t.get("History", []) if isinstance(h, str))]
+                   if any(monday_str <= h[:10] <= sunday_str for h in t.get("History", []) if isinstance(h, str) and len(h) >= 10)]
     if recent_done:
         for t in recent_done[:5]:
             briefing_lines.append(f"- {t['_id']}: {t.get('Title', '?')}")

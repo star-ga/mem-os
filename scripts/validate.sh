@@ -20,6 +20,12 @@ fail()    { CHECKS=$((CHECKS+1)); ISSUES=$((ISSUES+1)); log "  FAIL: $1"; }
 warn()    { WARNINGS=$((WARNINGS+1)); log "  WARN: $1"; }
 section() { log ""; log "=== $1 ==="; }
 
+# Ensure report directory exists (graceful on uninitialized workspaces)
+REPORT_DIR=$(dirname "$REPORT")
+if [[ ! -d "$REPORT_DIR" ]]; then
+  mkdir -p "$REPORT_DIR"
+fi
+
 cat > "$REPORT" <<EOF
 Mem OS Integrity Validation Report v1.1
 Date: $(date -u +"%Y-%m-%dT%H:%M:%SZ")

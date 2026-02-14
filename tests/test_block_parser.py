@@ -118,6 +118,42 @@ class TestGetById(unittest.TestCase):
         self.assertIsNone(get_by_id([{"_id": "D-001"}], "D-999"))
 
 
+class TestConstraintSignatureSingularPlural(unittest.TestCase):
+    """Parser should accept both ConstraintSignature: and ConstraintSignatures:."""
+
+    def test_singular_form(self):
+        text = (
+            "[D-20260214-001]\n"
+            "Statement: Test decision\n"
+            "Status: active\n"
+            "ConstraintSignature:\n"
+            "- id: CS-db-engine\n"
+            "  domain: infrastructure\n"
+            "  modality: must\n"
+        )
+        blocks = parse_blocks(text)
+        self.assertEqual(len(blocks), 1)
+        sigs = blocks[0].get("ConstraintSignatures", [])
+        self.assertEqual(len(sigs), 1)
+        self.assertEqual(sigs[0]["id"], "CS-db-engine")
+
+    def test_plural_form(self):
+        text = (
+            "[D-20260214-002]\n"
+            "Statement: Test decision\n"
+            "Status: active\n"
+            "ConstraintSignatures:\n"
+            "- id: CS-auth-method\n"
+            "  domain: security\n"
+            "  modality: must_not\n"
+        )
+        blocks = parse_blocks(text)
+        self.assertEqual(len(blocks), 1)
+        sigs = blocks[0].get("ConstraintSignatures", [])
+        self.assertEqual(len(sigs), 1)
+        self.assertEqual(sigs[0]["id"], "CS-auth-method")
+
+
 class TestExtractRefs(unittest.TestCase):
     def test_finds_refs(self):
         blocks = [

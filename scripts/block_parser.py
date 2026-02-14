@@ -67,8 +67,8 @@ def parse_blocks(text):
         if current is None:
             continue
 
-        # ConstraintSignatures: section start
-        if re.match(r"^ConstraintSignatures:\s*$", line):
+        # ConstraintSignatures: or ConstraintSignature: section start (accept both)
+        if re.match(r"^ConstraintSignatures?:\s*$", line):
             in_constraint_sigs = True
             current["ConstraintSignatures"] = []
             current_field = "ConstraintSignatures"

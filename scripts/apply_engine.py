@@ -613,12 +613,23 @@ def _op_supersede_decision(filepath, op):
 # ═══════════════════════════════════════════════
 
 def compute_fingerprint(proposal):
-    """Deterministic fingerprint from proposal content. Prevents duplicates."""
+    """Deterministic fingerprint from proposal content. Prevents duplicates.
+
+    Includes op payload fields (value, patch, status) to distinguish proposals
+    targeting the same block with different mutations.
+    """
     canon = json.dumps({
         "type": proposal.get("Type", ""),
         "target": proposal.get("TargetBlock", ""),
         "ops": [
-            {"op": op.get("op"), "file": op.get("file"), "target": op.get("target")}
+            {
+                "op": op.get("op"),
+                "file": op.get("file"),
+                "target": op.get("target"),
+                "value": op.get("value", ""),
+                "patch": op.get("patch", ""),
+                "status": op.get("status", ""),
+            }
             for op in proposal.get("Ops", [])
         ]
     }, sort_keys=True)
@@ -930,7 +941,17 @@ def _mark_proposal_status(source_file, proposal_id, new_status):
 
 def rollback(ws, receipt_ts):
     """Rollback from a receipt timestamp."""
-    snap_dir = os.path.join(ws, "intelligence/applied", receipt_ts)
+    # Sanitize receipt_ts: must match YYYYMMDD-HHMMSS format (no traversal)
+    if not re.match(r"^\d{8}-\d{6}$", receipt_ts):
+        print(f"ERROR: Invalid receipt timestamp format: {receipt_ts} (expected YYYYMMDD-HHMMSS)")
+        return False
+
+    try:
+        snap_dir = _safe_resolve(ws, os.path.join("intelligence/applied", receipt_ts))
+    except ValueError as e:
+        print(f"ERROR: {e}")
+        return False
+
     if not os.path.isdir(snap_dir):
         print(f"ERROR: Snapshot directory not found: {snap_dir}")
         return False

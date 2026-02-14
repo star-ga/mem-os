@@ -11,8 +11,10 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
 from apply_engine import (
     _safe_resolve, validate_proposal, create_snapshot, restore_snapshot,
     check_no_touch_window, check_fingerprint_dedup, compute_fingerprint,
+    rollback,
 )
 import json
+import subprocess
 from datetime import datetime, timedelta
 
 
@@ -258,13 +260,76 @@ class TestFreshInitValidate(unittest.TestCase):
         with tempfile.TemporaryDirectory() as ws:
             from init_workspace import init
             init(ws)
-            import subprocess
             result = subprocess.run(
                 ["bash", os.path.join(ws, "maintenance", "validate.sh"), ws],
                 capture_output=True, text=True, timeout=30,
             )
             self.assertEqual(result.returncode, 0, f"validate.sh failed:\n{result.stdout}")
             self.assertIn("0 issues", result.stdout)
+
+
+class TestRollbackPathTraversal(unittest.TestCase):
+    """Rollback must reject path-traversal receipt_ts values."""
+
+    def test_rejects_traversal(self):
+        with tempfile.TemporaryDirectory() as ws:
+            ok = rollback(ws, "../../../etc")
+            self.assertFalse(ok)
+
+    def test_rejects_arbitrary_string(self):
+        with tempfile.TemporaryDirectory() as ws:
+            ok = rollback(ws, "foo; rm -rf /")
+            self.assertFalse(ok)
+
+    def test_accepts_valid_format(self):
+        """Valid format but nonexistent dir should fail gracefully."""
+        with tempfile.TemporaryDirectory() as ws:
+            ok = rollback(ws, "20260214-120000")
+            self.assertFalse(ok)  # Dir doesn't exist, but format is valid
+
+
+class TestFingerprintPayload(unittest.TestCase):
+    """Fingerprint must include op payload to avoid false-dedup collisions."""
+
+    def test_different_values_different_fingerprints(self):
+        p1 = {
+            "Type": "edit", "TargetBlock": "D-20260214-001",
+            "Ops": [{"op": "update_field", "file": "decisions/DECISIONS.md",
+                      "target": "D-20260214-001", "value": "active"}],
+        }
+        p2 = {
+            "Type": "edit", "TargetBlock": "D-20260214-001",
+            "Ops": [{"op": "update_field", "file": "decisions/DECISIONS.md",
+                      "target": "D-20260214-001", "value": "superseded"}],
+        }
+        self.assertNotEqual(compute_fingerprint(p1), compute_fingerprint(p2))
+
+    def test_same_proposal_same_fingerprint(self):
+        p1 = {
+            "Type": "edit", "TargetBlock": "D-20260214-001",
+            "Ops": [{"op": "set_status", "file": "tasks/TASKS.md",
+                      "target": "T-20260214-001", "status": "done"}],
+        }
+        self.assertEqual(compute_fingerprint(p1), compute_fingerprint(p1))
+
+
+class TestValidateUninitWorkspace(unittest.TestCase):
+    """validate.sh should handle uninitialized workspaces gracefully."""
+
+    def test_creates_maintenance_dir(self):
+        """Running on a dir with no maintenance/ should not crash."""
+        with tempfile.TemporaryDirectory() as ws:
+            validate_sh = os.path.join(
+                os.path.dirname(__file__), "..", "scripts", "validate.sh"
+            )
+            result = subprocess.run(
+                ["bash", validate_sh, ws],
+                capture_output=True, text=True, timeout=30,
+            )
+            # It will have issues (missing files) but should not crash
+            self.assertIn("TOTAL:", result.stdout)
+            # The maintenance dir should have been created for the report
+            self.assertTrue(os.path.isdir(os.path.join(ws, "maintenance")))
 
 
 if __name__ == "__main__":

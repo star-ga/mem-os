@@ -161,10 +161,10 @@ Merge into your `.claude/hooks.json`:
 ### 7. Verify
 
 ```bash
-python3 scripts/recall.py --query "test" --workspace .
+python3 maintenance/recall.py --query "test" --workspace .
 # → No results found. (empty workspace — correct)
 
-python3 scripts/capture.py .
+python3 maintenance/capture.py .
 # → capture: no daily log for YYYY-MM-DD, nothing to scan (correct)
 ```
 
@@ -337,9 +337,9 @@ Every tool above does **storage + retrieval**. None of them answer:
 ### Default: Lexical (TF-IDF)
 
 ```bash
-python3 scripts/recall.py --query "authentication" --workspace .
-python3 scripts/recall.py --query "auth" --json --limit 5 --workspace .
-python3 scripts/recall.py --query "deadline" --active-only --workspace .
+python3 maintenance/recall.py --query "authentication" --workspace .
+python3 maintenance/recall.py --query "auth" --json --limit 5 --workspace .
+python3 maintenance/recall.py --query "deadline" --active-only --workspace .
 ```
 
 Field-weighted TF-IDF with boosts for recency, active status, and priority. Searches across all structured files. Zero dependencies.
@@ -361,7 +361,7 @@ Set in `mem-os.json`:
 }
 ```
 
-Implement `RecallBackend` interface in `scripts/recall_vector.py`. Falls back to TF-IDF automatically if vector backend is unavailable.
+Implement `RecallBackend` interface in `maintenance/recall_vector.py`. Falls back to TF-IDF automatically if vector backend is unavailable.
 
 ---
 
