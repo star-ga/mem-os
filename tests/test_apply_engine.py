@@ -422,5 +422,170 @@ class TestBacklogLimit(unittest.TestCase):
             self.assertTrue(exceeded, "Over limit should be exceeded")
 
 
+class TestFingerprintDedupCollision(unittest.TestCase):
+    """Fingerprint dedup must detect different proposals with same fingerprint."""
+
+    def test_different_proposal_same_fingerprint_detected(self):
+        """Two proposals targeting same block with same ops should collide."""
+        from apply_engine import check_fingerprint_dedup, compute_fingerprint
+        with tempfile.TemporaryDirectory() as ws:
+            from init_workspace import init
+            init(ws)
+
+            # Create a staged proposal in the proposed file
+            proposed_dir = os.path.join(ws, "intelligence/proposed")
+            os.makedirs(proposed_dir, exist_ok=True)
+
+            existing_proposal = {
+                "Type": "edit",
+                "TargetBlock": "D-20260214-001",
+                "Ops": [{"op": "set_status", "file": "decisions/DECISIONS.md",
+                         "target": "D-20260214-001", "status": "superseded"}],
+            }
+            fp = compute_fingerprint(existing_proposal)
+
+            with open(os.path.join(proposed_dir, "DECISIONS_PROPOSED.md"), "w") as f:
+                f.write(f"\n[P-20260214-001]\nProposalId: P-20260214-001\n"
+                        f"Type: edit\nTargetBlock: D-20260214-001\n"
+                        f"Status: staged\nFingerprint: {fp}\n"
+                        f"Ops:\n- op: set_status\n  file: decisions/DECISIONS.md\n"
+                        f"  target: D-20260214-001\n  status: superseded\n")
+
+            # A NEW proposal with same ops/target but different ID should be detected as dup
+            new_proposal = {
+                "ProposalId": "P-20260214-099",
+                "Type": "edit",
+                "TargetBlock": "D-20260214-001",
+                "Ops": [{"op": "set_status", "file": "decisions/DECISIONS.md",
+                         "target": "D-20260214-001", "status": "superseded"}],
+            }
+            is_dup, dup_id = check_fingerprint_dedup(ws, new_proposal)
+            self.assertTrue(is_dup, "Should detect fingerprint collision")
+            self.assertEqual(dup_id, "P-20260214-001")
+
+    def test_same_proposal_id_not_self_collision(self):
+        """A proposal should not collide with itself."""
+        from apply_engine import check_fingerprint_dedup, compute_fingerprint
+        with tempfile.TemporaryDirectory() as ws:
+            from init_workspace import init
+            init(ws)
+
+            proposed_dir = os.path.join(ws, "intelligence/proposed")
+            os.makedirs(proposed_dir, exist_ok=True)
+
+            proposal = {
+                "ProposalId": "P-20260214-001",
+                "Type": "edit",
+                "TargetBlock": "D-20260214-001",
+                "Ops": [{"op": "set_status", "file": "decisions/DECISIONS.md",
+                         "target": "D-20260214-001", "status": "superseded"}],
+            }
+            fp = compute_fingerprint(proposal)
+
+            with open(os.path.join(proposed_dir, "DECISIONS_PROPOSED.md"), "w") as f:
+                f.write(f"\n[P-20260214-001]\nProposalId: P-20260214-001\n"
+                        f"Type: edit\nTargetBlock: D-20260214-001\n"
+                        f"Status: staged\nFingerprint: {fp}\n"
+                        f"Ops:\n- op: set_status\n  file: decisions/DECISIONS.md\n"
+                        f"  target: D-20260214-001\n  status: superseded\n")
+
+            # Same ID = self, not a collision
+            is_dup, dup_id = check_fingerprint_dedup(ws, proposal)
+            self.assertFalse(is_dup, "Same proposal ID should not self-collide")
+
+
+class TestSnapshotRecursionPrevention(unittest.TestCase):
+    """Snapshots must exclude intelligence/applied/ to prevent recursive nesting."""
+
+    def test_snapshot_excludes_applied_dir(self):
+        """intelligence/applied/ must NOT be copied into new snapshots."""
+        from apply_engine import create_snapshot
+        with tempfile.TemporaryDirectory() as ws:
+            from init_workspace import init
+            init(ws)
+
+            # Create a fake prior snapshot in intelligence/applied/
+            prior_snap = os.path.join(ws, "intelligence/applied/20260213-120000")
+            os.makedirs(prior_snap, exist_ok=True)
+            with open(os.path.join(prior_snap, "marker.txt"), "w") as f:
+                f.write("I should NOT appear in new snapshots")
+
+            # Create a new snapshot
+            snap_dir = create_snapshot(ws, "20260214-120000")
+
+            # The new snapshot's intelligence/ should NOT contain applied/
+            nested_applied = os.path.join(snap_dir, "intelligence/applied")
+            self.assertFalse(
+                os.path.exists(nested_applied),
+                "Snapshot must not recursively include intelligence/applied/"
+            )
+
+            # But intelligence files (like CONTRADICTIONS.md) SHOULD be copied
+            intel_dir = os.path.join(snap_dir, "intelligence")
+            self.assertTrue(os.path.isdir(intel_dir),
+                            "intelligence/ dir should exist in snapshot")
+
+
+class TestDeferredCooldown(unittest.TestCase):
+    """Deferred/rejected proposals have a cooldown period before re-proposal."""
+
+    def test_recent_rejected_blocks_new_proposal(self):
+        """A rejected proposal within cooldown period should block new proposals for same target."""
+        from apply_engine import check_deferred_cooldown
+        with tempfile.TemporaryDirectory() as ws:
+            from init_workspace import init
+            init(ws)
+
+            # Set cooldown to 7 days
+            state_path = os.path.join(ws, "memory/intel-state.json")
+            with open(state_path) as f:
+                state = json.load(f)
+            state["defer_cooldown_days"] = 7
+            with open(state_path, "w") as f:
+                json.dump(state, f)
+
+            # Create a recently rejected proposal
+            proposed_dir = os.path.join(ws, "intelligence/proposed")
+            os.makedirs(proposed_dir, exist_ok=True)
+            today = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+            with open(os.path.join(proposed_dir, "DECISIONS_PROPOSED.md"), "w") as f:
+                f.write(f"\n[P-20260214-001]\nProposalId: P-20260214-001\n"
+                        f"Type: edit\nTargetBlock: D-20260214-001\n"
+                        f"Status: rejected\nCreated: {today}\n")
+
+            # New proposal for same target should be blocked
+            new_proposal = {"TargetBlock": "D-20260214-001"}
+            ok, reason = check_deferred_cooldown(ws, new_proposal)
+            self.assertFalse(ok, "Recent rejected proposal should block same target")
+            self.assertIn("cooldown", reason)
+
+    def test_old_rejected_allows_new_proposal(self):
+        """A rejected proposal outside cooldown period should allow re-proposal."""
+        from apply_engine import check_deferred_cooldown
+        with tempfile.TemporaryDirectory() as ws:
+            from init_workspace import init
+            init(ws)
+
+            state_path = os.path.join(ws, "memory/intel-state.json")
+            with open(state_path) as f:
+                state = json.load(f)
+            state["defer_cooldown_days"] = 7
+            with open(state_path, "w") as f:
+                json.dump(state, f)
+
+            # Create an OLD rejected proposal (30 days ago)
+            proposed_dir = os.path.join(ws, "intelligence/proposed")
+            os.makedirs(proposed_dir, exist_ok=True)
+            old_date = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%dT%H:%M:%S")
+            with open(os.path.join(proposed_dir, "DECISIONS_PROPOSED.md"), "w") as f:
+                f.write(f"\n[P-20260115-001]\nProposalId: P-20260115-001\n"
+                        f"Type: edit\nTargetBlock: D-20260214-001\n"
+                        f"Status: rejected\nCreated: {old_date}\n")
+
+            new_proposal = {"TargetBlock": "D-20260214-001"}
+            ok, reason = check_deferred_cooldown(ws, new_proposal)
+            self.assertTrue(ok, "Old rejected proposal should not block same target")
+
+
 if __name__ == "__main__":
     unittest.main()

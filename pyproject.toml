@@ -32,13 +32,12 @@ requires = ["setuptools>=64"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-packages = ["scripts"]
-package-dir = {"scripts" = "scripts"}
+packages = ["mem_os"]
+package-dir = {"mem_os" = "scripts"}
 
 [tool.setuptools.package-data]
-scripts = ["*.sh"]
+mem_os = ["*.sh"]
 
-[tool.setuptools.data-files]
-"share/mem-os/templates" = ["templates/*.md", "templates/*.json"]
-"share/mem-os/hooks" = ["hooks/*.sh"]
-"share/mem-os/skills" = ["skills/**/*.md"]
+# Note: mem-os is primarily a Claude Code plugin (installed via git clone).
+# Templates, hooks, and skills are located relative to the repo root.
+# For development: pip install -e .

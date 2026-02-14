@@ -3,3 +3,8 @@ __pycache__/
 *.cover
 .DS_Store
 firebase-debug.log
+build/
+dist/
+*.egg-info/
+.venv*/
+temp_workspace/
