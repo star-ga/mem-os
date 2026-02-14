@@ -326,7 +326,7 @@ Every tool above does **storage + retrieval**. None of them answer:
 - "What's the downstream impact if I change this decision?"
 - "Is my memory state structurally valid right now?"
 
-**Mem OS is the only memory system with an immune system.**
+**Mem OS focuses on memory governance and integrity — an area most memory systems do not address directly.**
 
 ---
 
