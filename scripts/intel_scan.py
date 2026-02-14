@@ -101,7 +101,7 @@ def load_all(ws):
         if os.path.exists(path):
             try:
                 data[key] = parse_file(path)
-            except Exception as e:
+            except (OSError, UnicodeDecodeError, ValueError) as e:
                 data[key] = []
                 print(f"WARNING: Failed to parse {path}: {e}", file=sys.stderr)
         else:
@@ -554,13 +554,13 @@ def generate_snapshot(data, ws, report):
     """Generate state snapshot as JSON."""
     report.section("4. STATE SNAPSHOT")
 
-    today = datetime.utcnow().strftime("%Y-%m-%d")
+    today = datetime.now().strftime("%Y-%m-%d")
     decisions = data["decisions"]
     tasks = data["tasks"]
 
     snapshot = {
         "date": today,
-        "generated_at": datetime.utcnow().isoformat() + "Z",
+        "generated_at": datetime.now().isoformat() + "Z",
         "decisions": {
             "active": [d["_id"] for d in decisions if d.get("Status") == "active"],
             "superseded": [d["_id"] for d in decisions if d.get("Status") == "superseded"],
@@ -611,7 +611,7 @@ def generate_briefing(data, contradictions, drift_signals, impacts, ws, report):
     """Generate weekly strategic briefing."""
     report.section("5. WEEKLY BRIEFING")
 
-    today = datetime.utcnow()
+    today = datetime.now()
     # ISO week
     year, week, _ = today.isocalendar()
     week_id = f"B-{year}-W{week:02d}"
@@ -759,7 +759,7 @@ def write_contradictions(contradictions, ws, report):
     with open(path, "r") as f:
         existing = f.read()
 
-    today = datetime.utcnow().strftime("%Y%m%d")
+    today = datetime.now().strftime("%Y%m%d")
     # Count existing for today to get next sequence number
     existing_today = len(re.findall(rf"^\[C-{today}-\d{{3}}\]", existing, re.MULTILINE))
 
@@ -774,7 +774,7 @@ def write_contradictions(contradictions, ws, report):
 
         block = f"""
 [{cid}]
-Date: {datetime.utcnow().strftime('%Y-%m-%d')}
+Date: {datetime.now().strftime('%Y-%m-%d')}
 Severity: {c['severity']}
 Type: decision_vs_decision
 Statement: {c['reason']}
@@ -807,7 +807,7 @@ def write_drift(drift_signals, ws, report):
     with open(path, "r") as f:
         existing = f.read()
 
-    today = datetime.utcnow().strftime("%Y%m%d")
+    today = datetime.now().strftime("%Y%m%d")
     existing_today = len(re.findall(rf"^\[DREF-{today}-\d{{3}}\]", existing, re.MULTILINE))
 
     new_blocks = []
@@ -822,7 +822,7 @@ def write_drift(drift_signals, ws, report):
 
         block = f"""
 [{dref_id}]
-Date: {datetime.utcnow().strftime('%Y-%m-%d')}
+Date: {datetime.now().strftime('%Y-%m-%d')}
 Severity: {s['severity']}
 Signal: {s['signal']}
 Summary: {s['summary']}
@@ -849,13 +849,13 @@ def write_impact(impacts, ws, report):
         return
 
     path = f"{ws}/intelligence/IMPACT.md"
-    today = datetime.utcnow().strftime("%Y%m%d")
+    today = datetime.now().strftime("%Y%m%d")
 
     lines = [
         "# IMPACT — Mem OS v2.0",
         "",
         "> Decision impact graph: decision -> affects -> projects/tasks/incidents/invariants.",
-        f"> Last rebuilt: {datetime.utcnow().strftime('%Y-%m-%d')}",
+        f"> Last rebuilt: {datetime.now().strftime('%Y-%m-%d')}",
         "> ID format: I-YYYYMMDD-###",
         "",
         "---",
@@ -865,7 +865,7 @@ def write_impact(impacts, ws, report):
         iid = f"I-{today}-{i + 1:03d}"
         lines.append("")
         lines.append(f"[{iid}]")
-        lines.append(f"Date: {datetime.utcnow().strftime('%Y-%m-%d')}")
+        lines.append(f"Date: {datetime.now().strftime('%Y-%m-%d')}")
         lines.append(f"Decision: {imp['decision']}")
         lines.append("Affects:")
         if imp["projects"]:
@@ -902,7 +902,7 @@ def main():
     report = IntelReport()
 
     report.lines.append(f"Mem OS Intelligence Scan Report v2.0")
-    report.lines.append(f"Date: {datetime.utcnow().isoformat()}Z")
+    report.lines.append(f"Date: {datetime.now().isoformat()}Z")
     report.lines.append(f"Workspace: {ws}")
 
     # Load state
@@ -931,7 +931,7 @@ def main():
         briefing = generate_briefing(data, contradictions, drift_signals, impacts, ws, report)
 
         # Update intel-state
-        now = datetime.utcnow().isoformat() + "Z"
+        now = datetime.now().isoformat() + "Z"
         intel_state["last_scan"] = now
         intel_state["last_snapshot"] = now
         intel_state["counters"]["contradictions_open"] = len(contradictions)

@@ -84,6 +84,12 @@ DEFAULT_CONFIG = {
 def init(ws):
     """Initialize a mem-os workspace."""
     ws = os.path.abspath(ws)
+
+    # Security: reject symlinks as workspace root to prevent writing outside intended location
+    if os.path.islink(ws):
+        print(f"ERROR: workspace path is a symlink: {ws}", file=sys.stderr)
+        sys.exit(1)
+
     created = []
     skipped = []
 
