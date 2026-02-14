@@ -68,8 +68,8 @@ section "1. DECISIONS — IDs, fields, values"
 
 DEC_FILE="$WS/decisions/DECISIONS.md"
 if [[ -f "$DEC_FILE" ]]; then
-  dec_count=$(grep -cP '^\[D-\d{8}-\d{3}\]$' "$DEC_FILE" || echo 0)
-  bad_dec=$(grep -P '^\[D-' "$DEC_FILE" | grep -vP '^\[D-\d{8}-\d{3}\]$' || true)
+  dec_count=$(grep -cE '^\[D-[0-9]{8}-[0-9]{3}\]$' "$DEC_FILE" || echo 0)
+  bad_dec=$(grep -E '^\[D-' "$DEC_FILE" | grep -vE '^\[D-[0-9]{8}-[0-9]{3}\]$' || true)
 
   if [[ -z "$bad_dec" ]]; then
     pass "All $dec_count decision IDs match [D-YYYYMMDD-###]"
@@ -88,8 +88,8 @@ if [[ -f "$DEC_FILE" ]]; then
   done
 
   # Value validation: Status
-  valid_status=$(grep -cP '^Status:\s*(active|superseded|revoked)\s*$' "$DEC_FILE" || echo 0)
-  bad_status=$(grep -P '^Status:' "$DEC_FILE" | grep -vP '^Status:\s*(active|superseded|revoked)\s*$' || true)
+  valid_status=$(grep -cE '^Status:[[:space:]]*(active|superseded|revoked)[[:space:]]*$' "$DEC_FILE" || echo 0)
+  bad_status=$(grep -E '^Status:' "$DEC_FILE" | grep -vE '^Status:[[:space:]]*(active|superseded|revoked)[[:space:]]*$' || true)
   if [[ -z "$bad_status" ]]; then
     pass "Decisions: all Status values valid ($valid_status)"
   else
@@ -97,8 +97,8 @@ if [[ -f "$DEC_FILE" ]]; then
   fi
 
   # Value validation: Scope
-  valid_scope=$(grep -cP '^Scope:\s*(global|project:\S+|channel:\S+)\s*$' "$DEC_FILE" || echo 0)
-  bad_scope=$(grep -P '^Scope:' "$DEC_FILE" | grep -vP '^Scope:\s*(global|project:\S+|channel:\S+)\s*$' || true)
+  valid_scope=$(grep -cE '^Scope:[[:space:]]*(global|project:[^ ]+|channel:[^ ]+)[[:space:]]*$' "$DEC_FILE" || echo 0)
+  bad_scope=$(grep -E '^Scope:' "$DEC_FILE" | grep -vE '^Scope:[[:space:]]*(global|project:[^ ]+|channel:[^ ]+)[[:space:]]*$' || true)
   if [[ -z "$bad_scope" ]]; then
     pass "Decisions: all Scope values valid ($valid_scope)"
   else
@@ -106,8 +106,8 @@ if [[ -f "$DEC_FILE" ]]; then
   fi
 
   # Supersedes: must be "none" or valid D-ID
-  valid_sup=$(grep -cP '^Supersedes:\s*(D-\d{8}-\d{3}|none)\s*$' "$DEC_FILE" || echo 0)
-  bad_sup=$(grep -P '^Supersedes:' "$DEC_FILE" | grep -vP '^Supersedes:\s*(D-\d{8}-\d{3}|none)\s*$' || true)
+  valid_sup=$(grep -cE '^Supersedes:[[:space:]]*(D-[0-9]{8}-[0-9]{3}|none)[[:space:]]*$' "$DEC_FILE" || echo 0)
+  bad_sup=$(grep -E '^Supersedes:' "$DEC_FILE" | grep -vE '^Supersedes:[[:space:]]*(D-[0-9]{8}-[0-9]{3}|none)[[:space:]]*$' || true)
   if [[ -z "$bad_sup" ]]; then
     pass "Decisions: all Supersedes values valid ($valid_sup)"
   else
@@ -121,8 +121,8 @@ section "2. TASKS — IDs, fields, values"
 
 TASK_FILE="$WS/tasks/TASKS.md"
 if [[ -f "$TASK_FILE" ]]; then
-  task_count=$(grep -cP '^\[T-\d{8}-\d{3}\]$' "$TASK_FILE" || echo 0)
-  bad_task=$(grep -P '^\[T-' "$TASK_FILE" | grep -vP '^\[T-\d{8}-\d{3}\]$' || true)
+  task_count=$(grep -cE '^\[T-[0-9]{8}-[0-9]{3}\]$' "$TASK_FILE" || echo 0)
+  bad_task=$(grep -E '^\[T-' "$TASK_FILE" | grep -vE '^\[T-[0-9]{8}-[0-9]{3}\]$' || true)
 
   if [[ -z "$bad_task" ]]; then
     pass "All $task_count task IDs match [T-YYYYMMDD-###]"
@@ -141,8 +141,8 @@ if [[ -f "$TASK_FILE" ]]; then
   done
 
   # Value validation: Status
-  valid_ts=$(grep -cP '^Status:\s*(todo|doing|blocked|done|canceled)\s*$' "$TASK_FILE" || echo 0)
-  bad_ts=$(grep -P '^Status:' "$TASK_FILE" | grep -vP '^Status:\s*(todo|doing|blocked|done|canceled)\s*$' || true)
+  valid_ts=$(grep -cE '^Status:[[:space:]]*(todo|doing|blocked|done|canceled)[[:space:]]*$' "$TASK_FILE" || echo 0)
+  bad_ts=$(grep -E '^Status:' "$TASK_FILE" | grep -vE '^Status:[[:space:]]*(todo|doing|blocked|done|canceled)[[:space:]]*$' || true)
   if [[ -z "$bad_ts" ]]; then
     pass "Tasks: all Status values valid ($valid_ts)"
   else
@@ -150,8 +150,8 @@ if [[ -f "$TASK_FILE" ]]; then
   fi
 
   # Value validation: Priority
-  valid_pri=$(grep -cP '^Priority:\s*P[0-3]\s*$' "$TASK_FILE" || echo 0)
-  bad_pri=$(grep -P '^Priority:' "$TASK_FILE" | grep -vP '^Priority:\s*P[0-3]\s*$' || true)
+  valid_pri=$(grep -cE '^Priority:[[:space:]]*P[0-3][[:space:]]*$' "$TASK_FILE" || echo 0)
+  bad_pri=$(grep -E '^Priority:' "$TASK_FILE" | grep -vE '^Priority:[[:space:]]*P[0-3][[:space:]]*$' || true)
   if [[ -z "$bad_pri" ]]; then
     pass "Tasks: all Priority values valid ($valid_pri)"
   else
@@ -159,8 +159,8 @@ if [[ -f "$TASK_FILE" ]]; then
   fi
 
   # Value validation: Owner
-  valid_own=$(grep -cP '^Owner:\s*(user|bot)\s*$' "$TASK_FILE" || echo 0)
-  bad_own=$(grep -P '^Owner:' "$TASK_FILE" | grep -vP '^Owner:\s*(user|bot)\s*$' || true)
+  valid_own=$(grep -cE '^Owner:[[:space:]]*(user|bot)[[:space:]]*$' "$TASK_FILE" || echo 0)
+  bad_own=$(grep -E '^Owner:' "$TASK_FILE" | grep -vE '^Owner:[[:space:]]*(user|bot)[[:space:]]*$' || true)
   if [[ -z "$bad_own" ]]; then
     pass "Tasks: all Owner values valid ($valid_own)"
   else
@@ -168,7 +168,7 @@ if [[ -f "$TASK_FILE" ]]; then
   fi
 
   # History: must have at least one dated entry per block
-  history_entries=$(grep -cP '^\s*-\s*\d{4}-\d{2}-\d{2}:\s.+' "$TASK_FILE" || echo 0)
+  history_entries=$(grep -cE '^[[:space:]]*-[[:space:]]*[0-9]{4}-[0-9]{2}-[0-9]{2}:[[:space:]].+' "$TASK_FILE" || echo 0)
   if [[ "$history_entries" -ge "$task_count" ]]; then
     pass "Tasks: History has dated entries ($history_entries entries across $task_count blocks)"
   else
@@ -182,8 +182,8 @@ section "3. ENTITIES — IDs & required fields"
 
 # Projects: PRJ-slug
 if [[ -f "$WS/entities/projects.md" ]]; then
-  prj_count=$(grep -cP '^\[PRJ-[a-z0-9-]+\]$' "$WS/entities/projects.md" || echo 0)
-  bad_prj=$(grep -P '^\[PRJ-' "$WS/entities/projects.md" | grep -vP '^\[PRJ-[a-z0-9-]+\]$' || true)
+  prj_count=$(grep -cE '^\[PRJ-[a-z0-9-]+\]$' "$WS/entities/projects.md" || echo 0)
+  bad_prj=$(grep -E '^\[PRJ-' "$WS/entities/projects.md" | grep -vE '^\[PRJ-[a-z0-9-]+\]$' || true)
   if [[ -z "$bad_prj" ]]; then
     pass "Projects: all $prj_count IDs match [PRJ-slug]"
   else
@@ -193,8 +193,8 @@ fi
 
 # People: PER-slug
 if [[ -f "$WS/entities/people.md" ]]; then
-  per_count=$(grep -cP '^\[PER-[a-z0-9-]+\]$' "$WS/entities/people.md" || echo 0)
-  bad_per=$(grep -P '^\[PER-' "$WS/entities/people.md" | grep -vP '^\[PER-[a-z0-9-]+\]$' || true)
+  per_count=$(grep -cE '^\[PER-[a-z0-9-]+\]$' "$WS/entities/people.md" || echo 0)
+  bad_per=$(grep -E '^\[PER-' "$WS/entities/people.md" | grep -vE '^\[PER-[a-z0-9-]+\]$' || true)
   if [[ -z "$bad_per" ]]; then
     pass "People: all $per_count IDs match [PER-slug]"
   else
@@ -204,8 +204,8 @@ fi
 
 # Tools: TOOL-slug
 if [[ -f "$WS/entities/tools.md" ]]; then
-  tool_count=$(grep -cP '^\[TOOL-[a-z0-9-]+\]$' "$WS/entities/tools.md" || echo 0)
-  bad_tool=$(grep -P '^\[TOOL-' "$WS/entities/tools.md" | grep -vP '^\[TOOL-[a-z0-9-]+\]$' || true)
+  tool_count=$(grep -cE '^\[TOOL-[a-z0-9-]+\]$' "$WS/entities/tools.md" || echo 0)
+  bad_tool=$(grep -E '^\[TOOL-' "$WS/entities/tools.md" | grep -vE '^\[TOOL-[a-z0-9-]+\]$' || true)
   if [[ -z "$bad_tool" ]]; then
     pass "Tools: all $tool_count IDs match [TOOL-slug]"
   else
@@ -215,8 +215,8 @@ fi
 
 # Incidents: INC-YYYYMMDD-slug + required fields
 if [[ -f "$WS/entities/incidents.md" ]]; then
-  inc_count=$(grep -cP '^\[INC-\d{8}-[a-z0-9-]+\]$' "$WS/entities/incidents.md" || echo 0)
-  bad_inc=$(grep -P '^\[INC-' "$WS/entities/incidents.md" | grep -vP '^\[INC-\d{8}-[a-z0-9-]+\]$' || true)
+  inc_count=$(grep -cE '^\[INC-[0-9]{8}-[a-z0-9-]+\]$' "$WS/entities/incidents.md" || echo 0)
+  bad_inc=$(grep -E '^\[INC-' "$WS/entities/incidents.md" | grep -vE '^\[INC-[0-9]{8}-[a-z0-9-]+\]$' || true)
   if [[ -z "$bad_inc" ]]; then
     pass "Incidents: all $inc_count IDs match [INC-YYYYMMDD-slug]"
   else
@@ -241,7 +241,7 @@ for wfile in "$WS/summaries/weekly"/*.md; do
   [[ -f "$wfile" ]] || continue
   fname=$(basename "$wfile")
 
-  wid=$(grep -cP '^\[W-\d{4}-W\d{2}\]$' "$wfile" || echo 0)
+  wid=$(grep -cE '^\[W-[0-9]{4}-W[0-9]{2}\]$' "$wfile" || echo 0)
   if [[ "$wid" -gt 0 ]]; then
     pass "$fname: valid [W-YYYY-W##] ID"
   else
@@ -265,7 +265,7 @@ for mfile in "$WS/decisions/DECISIONS.md" "$WS/tasks/TASKS.md" "$WS/entities/inc
   [[ -f "$mfile" ]] || continue
   fname=$(basename "$mfile")
 
-  blocks=$(grep -cP '^\[' "$mfile" || echo 0)
+  blocks=$(grep -cE '^\[' "$mfile" || echo 0)
   sources=$(grep -c '^Sources:' "$mfile" || echo 0)
 
   if [[ "$sources" -ge "$blocks" ]]; then
@@ -297,15 +297,15 @@ section "6. CROSS-REFERENCE INTEGRITY"
 TMP="/tmp/memos_validate_$$"
 mkdir -p "$TMP"
 
-grep -hoP '^\[D-\d{8}-\d{3}\]$' "$WS/decisions/DECISIONS.md" 2>/dev/null | tr -d '[]' | sort -u > "$TMP/ids_d.txt" || true
-grep -hoP '^\[T-\d{8}-\d{3}\]$' "$WS/tasks/TASKS.md" 2>/dev/null | tr -d '[]' | sort -u > "$TMP/ids_t.txt" || true
-grep -hoP '^\[INC-\d{8}-[a-z0-9-]+\]$' "$WS/entities/incidents.md" 2>/dev/null | tr -d '[]' | sort -u > "$TMP/ids_inc.txt" || true
-grep -hoP '^\[PRJ-[a-z0-9-]+\]$' "$WS/entities/projects.md" 2>/dev/null | tr -d '[]' | sort -u > "$TMP/ids_prj.txt" || true
-grep -hoP '^\[PER-[a-z0-9-]+\]$' "$WS/entities/people.md" 2>/dev/null | tr -d '[]' | sort -u > "$TMP/ids_per.txt" || true
-grep -hoP '^\[TOOL-[a-z0-9-]+\]$' "$WS/entities/tools.md" 2>/dev/null | tr -d '[]' | sort -u > "$TMP/ids_tool.txt" || true
+grep -hoE '^\[D-[0-9]{8}-[0-9]{3}\]$' "$WS/decisions/DECISIONS.md" 2>/dev/null | tr -d '[]' | sort -u > "$TMP/ids_d.txt" || true
+grep -hoE '^\[T-[0-9]{8}-[0-9]{3}\]$' "$WS/tasks/TASKS.md" 2>/dev/null | tr -d '[]' | sort -u > "$TMP/ids_t.txt" || true
+grep -hoE '^\[INC-[0-9]{8}-[a-z0-9-]+\]$' "$WS/entities/incidents.md" 2>/dev/null | tr -d '[]' | sort -u > "$TMP/ids_inc.txt" || true
+grep -hoE '^\[PRJ-[a-z0-9-]+\]$' "$WS/entities/projects.md" 2>/dev/null | tr -d '[]' | sort -u > "$TMP/ids_prj.txt" || true
+grep -hoE '^\[PER-[a-z0-9-]+\]$' "$WS/entities/people.md" 2>/dev/null | tr -d '[]' | sort -u > "$TMP/ids_per.txt" || true
+grep -hoE '^\[TOOL-[a-z0-9-]+\]$' "$WS/entities/tools.md" 2>/dev/null | tr -d '[]' | sort -u > "$TMP/ids_tool.txt" || true
 
 # Collect all references across corpus
-grep -RhoP '\b(D-\d{8}-\d{3}|T-\d{8}-\d{3}|INC-\d{8}-[a-z0-9-]+|PRJ-[a-z0-9-]+|PER-[a-z0-9-]+|TOOL-[a-z0-9-]+)\b' \
+grep -RhoE '\b(D-[0-9]{8}-[0-9]{3}|T-[0-9]{8}-[0-9]{3}|INC-[0-9]{8}-[a-z0-9-]+|PRJ-[a-z0-9-]+|PER-[a-z0-9-]+|TOOL-[a-z0-9-]+)\b' \
   "$WS/decisions" "$WS/tasks" "$WS/entities" "$WS/summaries" "$WS/maintenance/MAINTENANCE.md" \
   --include='*.md' 2>/dev/null | sort -u > "$TMP/all_refs.txt" || true
 
@@ -335,8 +335,8 @@ section "7. SUPERSEDED CHAIN"
 
 if [[ -f "$DEC_FILE" ]]; then
   # Check Supersedes format
-  sup_valid=$(grep -cP '^Supersedes:\s*(D-\d{8}-\d{3}|none)\s*$' "$DEC_FILE" || echo 0)
-  sup_bad=$(grep -P '^Supersedes:' "$DEC_FILE" | grep -vP '^Supersedes:\s*(D-\d{8}-\d{3}|none)\s*$' || true)
+  sup_valid=$(grep -cE '^Supersedes:[[:space:]]*(D-[0-9]{8}-[0-9]{3}|none)[[:space:]]*$' "$DEC_FILE" || echo 0)
+  sup_bad=$(grep -E '^Supersedes:' "$DEC_FILE" | grep -vE '^Supersedes:[[:space:]]*(D-[0-9]{8}-[0-9]{3}|none)[[:space:]]*$' || true)
   if [[ -z "$sup_bad" ]]; then
     pass "Supersedes: all values are 'none' or valid D-ID ($sup_valid)"
   else
@@ -344,7 +344,7 @@ if [[ -f "$DEC_FILE" ]]; then
   fi
 
   # Check targets exist
-  sup_targets=$(grep -oP '^Supersedes:\s*\KD-\d{8}-\d{3}' "$DEC_FILE" || true)
+  sup_targets=$(grep -E '^Supersedes:' "$DEC_FILE" | grep -oE 'D-[0-9]{8}-[0-9]{3}' || true)
   chain_ok=true
   for sid in $sup_targets; do
     if ! grep -qF "[$sid]" "$DEC_FILE"; then
