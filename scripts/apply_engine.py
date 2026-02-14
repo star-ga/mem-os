@@ -242,12 +242,18 @@ def create_snapshot(ws, ts):
 
 
 def restore_snapshot(ws, snap_dir):
-    """Restore workspace from snapshot."""
+    """Restore workspace from snapshot (true rollback: delete + replace).
+
+    Uses rmtree + copytree to ensure files created during a failed
+    transaction are removed, not just overwritten.
+    """
     for d in SNAPSHOT_DIRS:
         src = os.path.join(snap_dir, d)
         dst = os.path.join(ws, d)
         if os.path.isdir(src):
-            shutil.copytree(src, dst, dirs_exist_ok=True)
+            if os.path.isdir(dst):
+                shutil.rmtree(dst)
+            shutil.copytree(src, dst)
 
     for f in SNAPSHOT_FILES:
         src = os.path.join(snap_dir, f)
@@ -265,7 +271,7 @@ def write_receipt(snap_dir, proposal, ts, pre_checks, status="in_progress"):
     lines = [
         f"[AR-{ts}]",
         f"ProposalId: {proposal.get('ProposalId', '?')}",
-        f"Date: {datetime.utcnow().strftime('%Y-%m-%d')}",
+        f"Date: {datetime.now().strftime('%Y-%m-%d')}",
         f"Time: {ts}",
         f"Mode: {_get_mode()}",
         f"Risk: {proposal.get('Risk', '?')}",
@@ -639,7 +645,7 @@ def check_no_touch_window(ws):
         return True, "No previous apply"
     try:
         last = datetime.fromisoformat(last_ts.replace("Z", "+00:00"))
-        now = datetime.now(last.tzinfo) if last.tzinfo else datetime.utcnow()
+        now = datetime.now(last.tzinfo) if last.tzinfo else datetime.now()
         delta = now - last.replace(tzinfo=None) if last.tzinfo else now - last
         if delta < timedelta(minutes=10):
             remaining = timedelta(minutes=10) - delta
@@ -657,7 +663,7 @@ def check_deferred_cooldown(ws, proposal):
     if not target:
         return True, "No target"
 
-    cutoff = datetime.utcnow() - timedelta(days=cooldown_days)
+    cutoff = datetime.now() - timedelta(days=cooldown_days)
 
     for pfile in PROPOSED_FILES:
         path = os.path.join(ws, pfile)
@@ -679,7 +685,7 @@ def check_deferred_cooldown(ws, proposal):
 def update_last_apply_ts(ws):
     """Record the timestamp of the last apply."""
     state = _load_intel_state(ws)
-    state["last_apply_ts"] = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+    state["last_apply_ts"] = datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ")
     _save_intel_state(ws, state)
 
 
@@ -821,7 +827,7 @@ def apply_proposal(ws, proposal_id, dry_run=False):
         return True, "Dry run OK"
 
     # 4. Create snapshot
-    ts = datetime.utcnow().strftime("%Y%m%d-%H%M%S")
+    ts = datetime.now().strftime("%Y%m%d-%H%M%S")
     print(f"\n--- Creating Snapshot: {ts} ---")
     snap_dir = create_snapshot(ws, ts)
     receipt_path = write_receipt(snap_dir, proposal, ts, pre_report)
@@ -918,7 +924,7 @@ def rollback(ws, receipt_ts):
     receipt_path = os.path.join(snap_dir, "APPLY_RECEIPT.md")
     if os.path.isfile(receipt_path):
         with open(receipt_path, "a") as f:
-            f.write(f"\nRolledBack: {datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')}\n")
+            f.write(f"\nRolledBack: {datetime.now().strftime('%Y-%m-%dT%H:%M:%SZ')}\n")
             f.write(f"FinalStatus: rolled_back\n")
 
     print(f"\n═══ ROLLED BACK from {receipt_ts} ═══")

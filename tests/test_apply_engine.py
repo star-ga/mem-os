@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
-"""Tests for apply_engine.py — focus on security and validation."""
+"""Tests for apply_engine.py — focus on security, validation, and rollback."""
 
 import os
+import shutil
 import sys
 import tempfile
 import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
-from apply_engine import _safe_resolve, validate_proposal
+from apply_engine import _safe_resolve, validate_proposal, create_snapshot, restore_snapshot
 
 
 class TestSafeResolve(unittest.TestCase):
@@ -108,6 +109,55 @@ class TestValidateProposal(unittest.TestCase):
         )
         errors = validate_proposal(p)
         self.assertTrue(any("op" in e.lower() for e in errors))
+
+
+class TestSnapshotRollback(unittest.TestCase):
+    """Verify atomic rollback removes files created during failed ops."""
+
+    def test_rollback_removes_new_files(self):
+        """Files created after snapshot must be deleted on restore."""
+        with tempfile.TemporaryDirectory() as ws:
+            # Set up workspace structure
+            os.makedirs(os.path.join(ws, "decisions"))
+            original = os.path.join(ws, "decisions", "DECISIONS.md")
+            with open(original, "w") as f:
+                f.write("# Decisions\n")
+
+            # Create snapshot
+            snap_dir = create_snapshot(ws, "test-rollback")
+
+            # Simulate a failed op creating a new file
+            rogue_file = os.path.join(ws, "decisions", "ROGUE.md")
+            with open(rogue_file, "w") as f:
+                f.write("# This should not survive rollback\n")
+            self.assertTrue(os.path.exists(rogue_file))
+
+            # Restore snapshot
+            restore_snapshot(ws, snap_dir)
+
+            # Rogue file must be gone (true atomic rollback)
+            self.assertFalse(os.path.exists(rogue_file))
+            # Original file must still exist
+            self.assertTrue(os.path.exists(original))
+
+    def test_rollback_restores_content(self):
+        """Modified files must revert to snapshot content."""
+        with tempfile.TemporaryDirectory() as ws:
+            os.makedirs(os.path.join(ws, "decisions"))
+            original = os.path.join(ws, "decisions", "DECISIONS.md")
+            with open(original, "w") as f:
+                f.write("original content")
+
+            snap_dir = create_snapshot(ws, "test-content")
+
+            # Modify file
+            with open(original, "w") as f:
+                f.write("corrupted content")
+
+            restore_snapshot(ws, snap_dir)
+
+            with open(original) as f:
+                self.assertEqual(f.read(), "original content")
 
 
 if __name__ == "__main__":
