@@ -34,6 +34,12 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
 packages = ["scripts"]
+package-dir = {"scripts" = "scripts"}
 
 [tool.setuptools.package-data]
 scripts = ["*.sh"]
+
+[tool.setuptools.data-files]
+"share/mem-os/templates" = ["templates/*.md", "templates/*.json"]
+"share/mem-os/hooks" = ["hooks/*.sh"]
+"share/mem-os/skills" = ["skills/**/*.md"]

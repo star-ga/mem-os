@@ -11,7 +11,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
 from apply_engine import (
     _safe_resolve, validate_proposal, create_snapshot, restore_snapshot,
     check_no_touch_window, check_fingerprint_dedup, compute_fingerprint,
-    rollback,
+    rollback, apply_proposal,
 )
 import json
 import subprocess
@@ -330,6 +330,44 @@ class TestValidateUninitWorkspace(unittest.TestCase):
             self.assertIn("TOTAL:", result.stdout)
             # The maintenance dir should have been created for the report
             self.assertTrue(os.path.isdir(os.path.join(ws, "maintenance")))
+
+
+class TestModeGate(unittest.TestCase):
+    """apply_proposal must reject in detect_only mode."""
+
+    def test_detect_only_blocks_apply(self):
+        with tempfile.TemporaryDirectory() as ws:
+            from init_workspace import init
+            init(ws)
+            # Default mode is detect_only
+            ok, msg = apply_proposal(ws, "P-20260214-001", dry_run=False)
+            self.assertFalse(ok)
+            self.assertIn("detect_only", msg)
+
+    def test_detect_only_blocks_dry_run(self):
+        with tempfile.TemporaryDirectory() as ws:
+            from init_workspace import init
+            init(ws)
+            ok, msg = apply_proposal(ws, "P-20260214-001", dry_run=False)
+            self.assertFalse(ok)
+            self.assertIn("detect_only", msg)
+
+    def test_propose_mode_allows_apply(self):
+        """In propose mode, apply should proceed past mode gate (will fail on missing proposal)."""
+        with tempfile.TemporaryDirectory() as ws:
+            from init_workspace import init
+            init(ws)
+            # Switch to propose mode
+            state_path = os.path.join(ws, "memory/intel-state.json")
+            with open(state_path) as f:
+                state = json.load(f)
+            state["self_correcting_mode"] = "propose"
+            with open(state_path, "w") as f:
+                json.dump(state, f)
+            ok, msg = apply_proposal(ws, "P-20260214-999", dry_run=False)
+            self.assertFalse(ok)
+            # Should fail on "not found", NOT on mode gate
+            self.assertIn("not found", msg.lower())
 
 
 if __name__ == "__main__":

@@ -788,6 +788,14 @@ def apply_proposal(ws, proposal_id, dry_run=False):
     print(f"Dry run: {dry_run}")
     print()
 
+    # 0. Mode gate: detect_only blocks all apply/dry-run
+    mode = _get_mode(ws)
+    print(f"Mode: {mode}")
+    if mode == "detect_only":
+        print("ERROR: Cannot apply proposals in detect_only mode.")
+        print("Switch to 'propose' or 'enforce' mode first.")
+        return False, "Blocked: detect_only mode does not allow apply"
+
     # 1. Find proposal
     proposal, source_file = find_proposal(ws, proposal_id)
     if not proposal:
@@ -845,28 +853,31 @@ def apply_proposal(ws, proposal_id, dry_run=False):
     else:
         print(f"  No-touch window: PASS")
 
-    # 3. Check preconditions
-    print("\n--- Precondition Checks ---")
-    ok, pre_report = check_preconditions(ws)
-    for r in pre_report:
-        print(f"  {r}")
-    if not ok:
-        print("PRECONDITIONS FAILED — aborting.")
-        return False, "Precondition check failed"
-
     if dry_run:
+        # Dry run: show ops without mutation (skip preconditions to avoid side effects)
         print("\n--- DRY RUN: would execute these ops ---")
         for i, op in enumerate(proposal.get("Ops", [])):
             print(f"  [{i}] {op.get('op')} -> {op.get('file')}:{op.get('target', 'eof')}")
         print("\nDry run complete. No changes made.")
         return True, "Dry run OK"
 
-    # 4. Create snapshot
+    # 3. Create snapshot BEFORE preconditions (O1: snapshot before any mutation)
     ts = datetime.now().strftime("%Y%m%d-%H%M%S")
     print(f"\n--- Creating Snapshot: {ts} ---")
     snap_dir = create_snapshot(ws, ts)
-    receipt_path = write_receipt(snap_dir, proposal, ts, pre_report)
     print(f"  Snapshot: {snap_dir}")
+
+    # 4. Check preconditions (may run validate.sh + intel_scan.py which write reports)
+    print("\n--- Precondition Checks ---")
+    ok, pre_report = check_preconditions(ws)
+    for r in pre_report:
+        print(f"  {r}")
+    if not ok:
+        print("PRECONDITIONS FAILED — rolling back.")
+        restore_snapshot(ws, snap_dir)
+        return False, "Precondition check failed"
+
+    receipt_path = write_receipt(snap_dir, proposal, ts, pre_report)
     print(f"  Receipt: {receipt_path}")
 
     # 5. Execute ops

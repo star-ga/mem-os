@@ -897,6 +897,154 @@ def write_impact(impacts, ws, report):
 
 
 # ═══════════════════════════════════════════════
+# 7. Proposal Generation (propose/enforce modes)
+# ═══════════════════════════════════════════════
+
+def _load_config(ws):
+    """Load mem-os.json config."""
+    path = os.path.join(ws, "mem-os.json")
+    if os.path.exists(path):
+        with open(path) as f:
+            return json.load(f)
+    return {}
+
+
+def _count_staged_proposals(ws):
+    """Count proposals with Status: staged across all proposed/ files."""
+    count = 0
+    proposed_dir = os.path.join(ws, "intelligence/proposed")
+    if not os.path.isdir(proposed_dir):
+        return 0
+    for fn in os.listdir(proposed_dir):
+        if fn.endswith(".md"):
+            path = os.path.join(proposed_dir, fn)
+            with open(path) as f:
+                content = f.read()
+            count += content.count("\nStatus: staged")
+    return count
+
+
+def generate_proposals(contradictions, drift_signals, ws, intel_state, report):
+    """Generate fix proposals from scan findings (propose/enforce modes only).
+
+    Respects proposal_budget.per_run and proposal_budget.per_day limits.
+    """
+    report.section("7. PROPOSAL GENERATION")
+
+    config = _load_config(ws)
+    budget = config.get("proposal_budget", {})
+    per_run = budget.get("per_run", 3)
+    per_day = budget.get("per_day", 6)
+    backlog_limit = budget.get("backlog_limit", 30)
+
+    # Check backlog limit
+    staged = _count_staged_proposals(ws)
+    if staged >= backlog_limit:
+        report.warn(f"Backlog limit reached ({staged}/{backlog_limit}) — skipping proposals.")
+        return 0
+
+    # Check daily cap
+    today = datetime.now().strftime("%Y-%m-%d")
+    daily_count = intel_state.get("counters", {}).get("proposals_today", 0)
+    daily_date = intel_state.get("counters", {}).get("proposals_date", "")
+    if daily_date != today:
+        daily_count = 0  # Reset for new day
+
+    remaining_daily = per_day - daily_count
+    remaining_run = per_run
+    remaining = min(remaining_daily, remaining_run, backlog_limit - staged)
+
+    if remaining <= 0:
+        report.warn(f"Budget exhausted (daily: {daily_count}/{per_day}, run: 0/{per_run})")
+        return 0
+
+    proposals = []
+    proposal_date = datetime.now().strftime("%Y%m%d")
+
+    # Generate proposals from contradictions (supersede the lower-priority one)
+    for c in contradictions:
+        if len(proposals) >= remaining:
+            break
+        sig1 = c["sig1"]["sig"]
+        sig2 = c["sig2"]["sig"]
+        p1 = int(sig1.get("priority", 5))
+        p2 = int(sig2.get("priority", 5))
+        # Propose superseding the lower-priority decision
+        if p1 >= p2:
+            target_dec = c["sig2"]["decision"]
+        else:
+            target_dec = c["sig1"]["decision"]
+
+        pid = f"P-{proposal_date}-{len(proposals)+1:03d}"
+        proposals.append({
+            "id": pid,
+            "type": "edit",
+            "target": target_dec,
+            "risk": "high",
+            "evidence": c["reason"],
+            "action": f"Review contradiction: {c['reason']}. Consider superseding {target_dec}.",
+        })
+
+    # Generate proposals from drift signals (dead decisions)
+    for s in drift_signals:
+        if len(proposals) >= remaining:
+            break
+        if s["signal"] == "dead_decisions":
+            for did in s.get("evidence", [])[:2]:
+                if len(proposals) >= remaining:
+                    break
+                pid = f"P-{proposal_date}-{len(proposals)+1:03d}"
+                proposals.append({
+                    "id": pid,
+                    "type": "edit",
+                    "target": did,
+                    "risk": "medium",
+                    "evidence": "Decision not referenced by any active task",
+                    "action": f"Create a task referencing {did} or supersede it.",
+                })
+
+    # Write proposals to DECISIONS_PROPOSED.md
+    if proposals:
+        proposed_path = os.path.join(ws, "intelligence/proposed/DECISIONS_PROPOSED.md")
+        with open(proposed_path, "r") as f:
+            existing = f.read()
+
+        new_blocks = []
+        for p in proposals:
+            block = (
+                f"\n[{p['id']}]\n"
+                f"Type: {p['type']}\n"
+                f"TargetBlock: {p['target']}\n"
+                f"Risk: {p['risk']}\n"
+                f"Evidence: {p['evidence']}\n"
+                f"Action: {p['action']}\n"
+                f"Status: staged\n"
+                f"Sources:\n"
+                f"- maintenance/intel-report.txt\n"
+            )
+            # Skip if already proposed
+            if p["target"] in existing and "staged" in existing:
+                continue
+            new_blocks.append(block)
+
+        if new_blocks:
+            with open(proposed_path, "a") as f:
+                for block in new_blocks:
+                    f.write(block)
+
+        # Update daily counter
+        intel_state.setdefault("counters", {})
+        intel_state["counters"]["proposals_today"] = daily_count + len(new_blocks)
+        intel_state["counters"]["proposals_date"] = today
+
+        report.ok(f"Generated {len(new_blocks)} proposal(s) (budget: {remaining_run}/run, {remaining_daily}/day)")
+    else:
+        report.ok("No proposals needed.")
+
+    return len(proposals)
+
+
+# ═══════════════════════════════════════════════
 # Main
 # ═══════════════════════════════════════════════
 
@@ -936,6 +1084,18 @@ def main():
         write_contradictions(contradictions, ws, report)
         write_drift(drift_signals, ws, report)
         write_impact(impacts, ws, report)
+
+        # Mode-aware proposal generation
+        if mode in ("propose", "enforce") and (contradictions or drift_signals):
+            proposals_written = generate_proposals(
+                contradictions, drift_signals, ws, intel_state, report
+            )
+        else:
+            if mode == "detect_only" and (contradictions or drift_signals):
+                report.info_msg(
+                    f"Mode is detect_only — skipping proposal generation. "
+                    f"Switch to 'propose' to generate fix proposals."
+                )
 
         # Generate briefing
         briefing = generate_briefing(data, contradictions, drift_signals, impacts, ws, report)

@@ -71,36 +71,40 @@ ProposalStatus ::= "staged" | "applied" | "rejected" | "deferred" | "expired" | 
 ConstraintSignatures encode the semantic intent of decisions as structured metadata, enabling automated contradiction detection.
 
 ```ebnf
-ConstraintSignature ::= "ConstraintSignature:" NewLine
-                        { SigField NewLine }
+(* Both "ConstraintSignature:" and "ConstraintSignatures:" are accepted *)
+ConstraintSignatures ::= ("ConstraintSignature:" | "ConstraintSignatures:") NewLine
+                         { SigItem }
 
+SigItem       ::= "- id:" Space SigID NewLine { SigField NewLine }
 SigField      ::= Indent SigKey ":" Space SigValue
 Indent        ::= Space Space                       (* 2 spaces *)
 
 (* Required fields *)
-SigKey        ::= "axis.key"                        (* unique constraint axis *)
-                | "relation"                        (* constraint type *)
-                | "object"                          (* target value *)
-                | "enforcement"                     (* hard | soft | advisory *)
+SigKey        ::= "id"                              (* unique signature ID, e.g. CS-db-engine *)
                 | "domain"                          (* functional domain *)
-
-(* Optional fields *)
                 | "subject"                         (* what is constrained *)
                 | "predicate"                       (* action verb *)
-                | "scope"                           (* module | project | org *)
-                | "modality"                        (* must | should | may *)
+                | "object"                          (* target value *)
+                | "modality"                        (* must | must_not | should | should_not | may *)
                 | "priority"                        (* 1-10, 10 = highest *)
-                | "lifecycle.created_by"            (* origin reference *)
-                | "lifecycle.created_at"            (* ISO date *)
-                | "lifecycle.expires"               (* ISO date or "never" *)
-                | "lifecycle.review_by"             (* ISO date *)
+                | "scope"                           (* {projects: [], channels: [], time: {}} *)
+                | "evidence"                        (* justification text *)
+
+(* Optional fields *)
+                | "axis"                            (* {key: "domain.subject"} — grouping key *)
+                | "relation"                        (* standalone | requires | composes_with | ... *)
+                | "enforcement"                     (* invariant | structural | policy | guideline *)
+                | "composes_with"                   (* [SigID, ...] — related signatures *)
+                | "lifecycle"                       (* {created_by, created_at, expires, review_by} *)
+                | "enforced_by"                     (* code path or tool enforcing this *)
 
 (* Enumerated values *)
-Relation      ::= "must_be" | "must_not_be" | "should_be" | "should_not_be"
-                | "prefers" | "requires" | "excludes" | "replaces"
-Enforcement   ::= "hard" | "soft" | "advisory"
-Scope         ::= "module" | "project" | "workspace" | "org"
-Modality      ::= "must" | "should" | "may"
+Domain        ::= "integrity" | "memory" | "retrieval" | "security"
+                | "llm_strategy" | "workflow" | "project" | "comms" | "finance" | "other"
+Modality      ::= "must" | "must_not" | "should" | "should_not" | "may"
+Relation      ::= "standalone" | "requires" | "implies" | "composes_with"
+                | "overrides" | "equivalent"
+Enforcement   ::= "invariant" | "structural" | "policy" | "guideline"
 ```
 
 ### Contradiction Detection Rule
@@ -260,13 +264,13 @@ These invariants MUST hold at all times. Any operation that would violate them M
 
 | # | Invariant | Enforcement |
 |---|---|---|
-| S1 | Every BlockID is unique across all files | validate.sh |
-| S2 | Every Decision must have Date, Status, Statement | validate.sh |
-| S3 | Every Task must have Date, Status, Title | validate.sh |
-| S4 | Every active Decision with priority >= 7 must have ConstraintSignature | validate.sh |
-| S5 | Every ConstraintSignature must have axis.key, relation, object, enforcement, domain | validate.sh |
-| S6 | Superseded decisions must have SupersededBy referencing a valid BlockID | validate.sh |
-| S7 | Tasks with AlignsWith must reference existing decision BlockIDs | validate.sh |
+| S1 | Every BlockID is unique within its file | validate.sh (per-file ID format checks) |
+| S2 | Every Decision must have Date, Status, Statement, Rationale, Supersedes, Tags, Sources | validate.sh |
+| S3 | Every Task must have Title, Status, Priority, Project, Due, Owner, Context, Next, Dependencies, Sources, History | validate.sh |
+| S4 | Every active Decision with integrity/security/memory/retrieval tags should have ConstraintSignatures | validate.sh (warning) |
+| S5 | Every ConstraintSignature must have id, domain, subject, predicate, object, modality, priority, scope, evidence | validate.sh (warning) |
+| S6 | Supersedes field must reference a valid D-ID or be "none" | validate.sh |
+| S7 | Active tasks should have AlignsWith or Justification | validate.sh (warning) |
 | S8 | Daily logs are append-only — existing content must not be modified | protocol |
 | S9 | Status values must be from the defined enum for each type | validate.sh |
 
