@@ -6,11 +6,12 @@ WS="${MEM_OS_WORKSPACE:-.}"
 CONFIG="$WS/mem-os.json"
 
 # Check if auto_capture is enabled (use python3 for robust JSON parsing)
+# Pass path via env var to prevent injection from paths with special chars
 if [ -f "$CONFIG" ]; then
-  AUTO=$(python3 -c "
-import json, sys
+  AUTO=$(MEM_OS_CONFIG="$CONFIG" python3 -c "
+import json, os, sys
 try:
-    d = json.load(open('$CONFIG'))
+    d = json.load(open(os.environ['MEM_OS_CONFIG']))
     print('true' if d.get('auto_capture', True) else 'false')
 except Exception:
     print('true')

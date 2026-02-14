@@ -59,7 +59,7 @@ Value         ::= { AnyChar }                       (* until NewLine *)
 
 ```ebnf
 DecisionStatus ::= "active" | "superseded" | "archived" | "draft"
-TaskStatus     ::= "todo" | "doing" | "done" | "blocked" | "cancelled"
+TaskStatus     ::= "todo" | "doing" | "done" | "blocked" | "canceled"
 SignalStatus   ::= "pending" | "accepted" | "rejected"
 ProposalStatus ::= "pending" | "approved" | "applied" | "rejected" | "deferred"
 ```

@@ -11,10 +11,11 @@ if [ ! -f "$STATE" ]; then
 fi
 
 # Parse JSON with python3 (robust, no jq dependency)
-read -r MODE LAST CONTRADICTIONS < <(python3 -c "
-import json, sys
+# Pass path via env var to prevent injection from paths with special chars
+read -r MODE LAST CONTRADICTIONS < <(MEM_OS_STATE="$STATE" python3 -c "
+import json, os, sys
 try:
-    d = json.load(open('$STATE'))
+    d = json.load(open(os.environ['MEM_OS_STATE']))
     print(d.get('self_correcting_mode', 'unknown'),
           d.get('last_scan', 'never'),
           d.get('contradictions_open', 0))

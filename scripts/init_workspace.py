@@ -68,9 +68,8 @@ DEFAULT_CONFIG = {
     "auto_capture": True,
     "auto_recall": True,
     "self_correcting_mode": "detect_only",
-    "semantic_search": {
-        "enabled": False,
-        "provider": "local",
+    "recall": {
+        "backend": "tfidf",
     },
     "proposal_budget": {
         "per_run": 3,
@@ -160,7 +159,7 @@ def main():
         for item in skipped:
             print(f"  = {item}")
 
-    print(f"\nDone. Run 'python3 maintenance/validate.sh {ws}' to verify.")
+    print(f"\nDone. Run 'bash maintenance/validate.sh {ws}' to verify.")
 
 
 if __name__ == "__main__":
