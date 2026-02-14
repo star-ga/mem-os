@@ -1,7 +1,7 @@
 {
   "name": "mem-os",
   "version": "1.0.0",
-  "description": "Best-in-class memory stack for OpenClaw agents — local-first, auditable, self-correcting",
+  "description": "Memory + Immune System for AI agents — local-first, auditable, self-correcting",
   "author": {
     "name": "STARGA Inc",
     "url": "https://star.ga"
@@ -10,10 +10,10 @@
   "license": "MIT",
   "keywords": [
     "memory",
+    "ai-agent",
     "integrity",
-    "intelligence",
-    "decisions",
     "recall",
+    "intelligence",
     "contradiction-detection",
     "drift-analysis",
     "self-correcting"

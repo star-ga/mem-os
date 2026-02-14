@@ -2,7 +2,7 @@
   "name": "mem-os",
   "version": "1.0.0",
   "private": false,
-  "description": "Memory OS plugin — structured memory + integrity immune system for AI agents",
+  "description": "Memory + Immune System for AI agents — local-first, auditable, self-correcting",
   "author": "STARGA Inc <noreply@star.ga>",
   "license": "MIT",
   "repository": {
@@ -15,6 +15,9 @@
     "integrity",
     "recall",
     "intelligence",
+    "contradiction-detection",
+    "drift-analysis",
+    "self-correcting",
     "claude-code-plugin"
   ],
   "engines": {

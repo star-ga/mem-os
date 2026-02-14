@@ -1,14 +1,14 @@
 [project]
 name = "mem-os"
 version = "1.0.0"
-description = "Memory OS — structured memory + integrity immune system for AI agents"
+description = "Memory + Immune System for AI agents — local-first, auditable, self-correcting"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.8"
 authors = [
     { name = "STARGA Inc", email = "noreply@star.ga" }
 ]
-keywords = ["memory", "ai-agent", "integrity", "recall", "intelligence"]
+keywords = ["memory", "ai-agent", "integrity", "recall", "intelligence", "contradiction-detection", "drift-analysis", "self-correcting"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
@@ -30,7 +30,7 @@ Issues = "https://github.com/star-ga/mem-os/issues"
 
 [build-system]
 requires = ["setuptools>=64"]
-build-backend = "setuptools.backends._legacy:_Backend"
+build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
 packages = []
