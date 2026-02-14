@@ -291,11 +291,13 @@ class TestE2EProposalToApply(unittest.TestCase):
             proposals = [b for b in blocks if b.get("ProposalId")]
             self.assertGreaterEqual(len(proposals), 1)
 
-            # Each proposal must pass validate_proposal
+            # Each proposal must pass validate_proposal and have a Fingerprint
             for p in proposals:
                 errors = validate_proposal(p)
                 self.assertEqual(errors, [],
                                  f"Proposal {p.get('ProposalId')} failed validation: {errors}")
+                self.assertTrue(p.get("Fingerprint"),
+                                f"Proposal {p.get('ProposalId')} missing Fingerprint field")
 
     def test_proposal_budget_limits_output(self):
         """per_run budget limits the number of proposals generated."""
@@ -358,8 +360,10 @@ class TestProposalRouting(unittest.TestCase):
             report = IntelReport()
             generate_proposals(contradictions, [], td, {"mode": "propose", "counters": {}}, report)
 
-            edits = open(os.path.join(td, "intelligence/proposed/EDITS_PROPOSED.md")).read()
-            decisions = open(os.path.join(td, "intelligence/proposed/DECISIONS_PROPOSED.md")).read()
+            with open(os.path.join(td, "intelligence/proposed/EDITS_PROPOSED.md")) as f:
+                edits = f.read()
+            with open(os.path.join(td, "intelligence/proposed/DECISIONS_PROPOSED.md")) as f:
+                decisions = f.read()
             self.assertIn("ProposalId:", edits, "Edit proposals should be in EDITS_PROPOSED.md")
             self.assertNotIn("ProposalId:", decisions, "Edit proposals should NOT be in DECISIONS_PROPOSED.md")
 

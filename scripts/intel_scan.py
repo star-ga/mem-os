@@ -13,6 +13,7 @@ Output: maintenance/intel-report.txt
 Exit code: 0 = clean, 1 = critical issues found
 """
 
+import hashlib
 import json
 import os
 import re
@@ -773,8 +774,11 @@ def write_contradictions(contradictions, ws, report):
         return
 
     path = f"{ws}/intelligence/CONTRADICTIONS.md"
-    with open(path, "r") as f:
-        existing = f.read()
+    try:
+        with open(path, "r") as f:
+            existing = f.read()
+    except FileNotFoundError:
+        existing = ""
 
     today = datetime.now().strftime("%Y%m%d")
     # Count existing for today to get next sequence number
@@ -821,8 +825,11 @@ def write_drift(drift_signals, ws, report):
         return
 
     path = f"{ws}/intelligence/DRIFT.md"
-    with open(path, "r") as f:
-        existing = f.read()
+    try:
+        with open(path, "r") as f:
+            existing = f.read()
+    except FileNotFoundError:
+        existing = ""
 
     today = datetime.now().strftime("%Y%m%d")
     existing_today = len(re.findall(rf"^\[DREF-{today}-\d{{3}}\]", existing, re.MULTILINE))
@@ -1043,6 +1050,18 @@ def generate_proposals(contradictions, drift_signals, ws, intel_state, report):
                     + (f"\n  status: {op['status']}" if 'status' in op else "")
                     for op in p.get("ops", [])
                 )
+                # Compute fingerprint (compatible with apply_engine.compute_fingerprint)
+                fp_canon = json.dumps({
+                    "type": p.get("type", ""),
+                    "target": p.get("target", ""),
+                    "ops": [
+                        {"op": op.get("op"), "file": op.get("file"),
+                         "target": op.get("target"), "value": op.get("value", ""),
+                         "patch": op.get("patch", ""), "status": op.get("status", "")}
+                        for op in p.get("ops", [])
+                    ]
+                }, sort_keys=True)
+                fp = hashlib.sha256(fp_canon.encode()).hexdigest()[:16]
                 block = (
                     f"\n[{p['id']}]\n"
                     f"ProposalId: {p['id']}\n"
@@ -1052,6 +1071,7 @@ def generate_proposals(contradictions, drift_signals, ws, intel_state, report):
                     f"Evidence:\n- {p['evidence']}\n"
                     f"Rollback: {p.get('rollback', 'restore_snapshot')}\n"
                     f"Ops:\n{ops_lines}\n"
+                    f"Fingerprint: {fp}\n"
                     f"Status: staged\n"
                     f"Sources:\n"
                     f"- maintenance/intel-report.txt\n"

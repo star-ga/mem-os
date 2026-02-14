@@ -241,6 +241,7 @@ The apply engine provides ACID-like guarantees for memory mutations.
 4. **Rollback on failure**: If validation fails, all files revert to pre-apply state
 5. **Receipt required**: Every apply produces an `APPLY_RECEIPT.md` in its snapshot directory (`intelligence/applied/<timestamp>/`)
 6. **No cascade**: One proposal per apply. No proposal may trigger another proposal
+7. **Snapshot scope**: Snapshots include workspace state directories (`decisions`, `tasks`, `entities`, `summaries`, `memory`) and intelligence files. Excluded: `maintenance/` (transient reports), `intelligence/applied/` (prevents recursive nesting)
 
 ### Apply Receipt Format
 
