@@ -480,6 +480,15 @@ All settings in `mem-os.json` (created by `init_workspace.py`):
 - **Bash** (for hooks and validate.sh)
 - **No external packages** — stdlib only
 
+### Platform Support
+
+| Platform | Status | Notes |
+|----------|--------|-------|
+| Linux | Full | Primary target |
+| macOS | Full | POSIX-compliant shell scripts |
+| Windows (WSL/Git Bash) | Full | Use WSL2 or Git Bash for shell hooks |
+| Windows (native) | Python only | Shell hooks require WSL; Python scripts work natively |
+
 ---
 
 ## Contributing

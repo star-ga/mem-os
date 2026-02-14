@@ -147,29 +147,37 @@ def detect_contradictions(decisions, report):
 
     report.info_msg(f"Scanning {len(sigs)} signatures across {len(active)} active decisions.")
 
+    # Group signatures by axis key to avoid O(N²) full comparison.
+    # Only signatures sharing an axis key can conflict, so we compare
+    # within each bucket: O(Σ n_k²) instead of O(N²).
+    from collections import defaultdict
+    axis_groups = defaultdict(list)
+    for s in sigs:
+        axis_groups[get_axis_key(s["sig"])].append(s)
+
     contradictions = []
     checked = set()
 
-    for i, s1 in enumerate(sigs):
-        for j, s2 in enumerate(sigs):
-            if i >= j:
-                continue
-            if s1["decision"] == s2["decision"]:
-                continue
+    for group in axis_groups.values():
+        for i, s1 in enumerate(group):
+            for j in range(i + 1, len(group)):
+                s2 = group[j]
+                if s1["decision"] == s2["decision"]:
+                    continue
 
-            pair_key = tuple(sorted([s1["sig"]["id"], s2["sig"]["id"]]))
-            if pair_key in checked:
-                continue
-            checked.add(pair_key)
+                pair_key = tuple(sorted([s1["sig"]["id"], s2["sig"]["id"]]))
+                if pair_key in checked:
+                    continue
+                checked.add(pair_key)
 
-            conflict = check_signature_conflict(s1["sig"], s2["sig"])
-            if conflict:
-                contradictions.append({
-                    "sig1": s1,
-                    "sig2": s2,
-                    "severity": conflict["severity"],
-                    "reason": conflict["reason"],
-                })
+                conflict = check_signature_conflict(s1["sig"], s2["sig"])
+                if conflict:
+                    contradictions.append({
+                        "sig1": s1,
+                        "sig2": s2,
+                        "severity": conflict["severity"],
+                        "reason": conflict["reason"],
+                    })
 
     if contradictions:
         for c in contradictions:
