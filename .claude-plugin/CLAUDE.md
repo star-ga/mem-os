@@ -1,10 +1,10 @@
-# mem-os — Memory + Integrity Plugin
+# Mem OS for OpenClaw — Memory + Immune System
 
 ## Available Commands
 - `/scan` — Run contradiction detection, drift analysis, impact graph, snapshot, briefing
 - `/validate` — Run structural integrity validation (80+ checks)
 - `/apply <ProposalId>` — Apply a staged proposal with atomic rollback
-- `/recall <query>` — Semantic recall from all memory files
+- `/recall <query>` — Lexical recall from all memory files (TF-IDF default, vector optional)
 - `/status` — Health dashboard (contradictions, drift, coverage)
 - `/init` — Scaffold a new mem-os workspace
 

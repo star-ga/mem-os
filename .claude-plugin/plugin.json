@@ -1,7 +1,7 @@
 {
   "name": "mem-os",
   "version": "1.0.0",
-  "description": "Memory operating system with integrity checking — recall PLUS immune system for your AI workspace",
+  "description": "Best-in-class memory stack for OpenClaw agents — local-first, auditable, self-correcting",
   "author": {
     "name": "STARGA Inc",
     "url": "https://star.ga"
