@@ -20,7 +20,18 @@
 
 Drop-in memory layer for [OpenClaw](https://github.com/anthropics/claude-code) (latest). Upgrades your agent from "chat history + notes" to a governed **Memory OS** with structured persistence, contradiction detection, drift analysis, safe self-correction, and full audit trail.
 
-> **If you want the strongest memory you can reasonably run with OpenClaw — this is it.**
+> **If your agent runs for weeks, it will drift. Mem OS prevents silent drift.**
+
+### Trust Signals
+
+| Principle | What it means |
+|---|---|
+| **Deterministic** | Same input → same output. No ML, no probabilistic mutations. |
+| **Auditable** | Every apply logged with timestamp, receipt, and DIFF. Full traceability. |
+| **Local-first** | All data stays on disk. No cloud calls, no telemetry, no phoning home. |
+| **No vendor lock-in** | Plain Markdown files. Move to any system, any time. |
+| **Zero magic** | Every check is a grep, every mutation is a file write. Read the source in 30 min. |
+| **No silent mutation** | Nothing writes to source of truth without explicit `/apply`. Ever. |
 
 ---
 
@@ -28,7 +39,8 @@ Drop-in memory layer for [OpenClaw](https://github.com/anthropics/claude-code) (
 
 - [Why Mem OS](#why-mem-os)
 - [Features](#features)
-- [Quick Start](#quick-start)
+- [Quick Start](#quick-start) (3 minutes)
+- [Health Summary](#health-summary)
 - [Commands](#commands)
 - [Architecture](#architecture)
 - [How It Compares](#how-it-compares)
@@ -36,6 +48,7 @@ Drop-in memory layer for [OpenClaw](https://github.com/anthropics/claude-code) (
 - [Auto-Capture](#auto-capture)
 - [Governance Modes](#governance-modes)
 - [Block Format](#block-format)
+- [Specification](#specification)
 - [Configuration](#configuration)
 - [Contributing](#contributing)
 - [License](#license)
@@ -156,6 +169,44 @@ python3 scripts/capture.py .
 ```
 
 You're live. Start in `detect_only` for one week, then move to `propose`.
+
+---
+
+## Health Summary
+
+After setup, this is what a healthy workspace looks like:
+
+```
+$ python3 maintenance/intel_scan.py .
+
+Mem OS Intelligence Scan Report v2.0
+Mode: detect_only
+
+=== 1. CONTRADICTION DETECTION ===
+  OK: No contradictions found among 25 signatures.
+
+=== 2. DRIFT ANALYSIS ===
+  OK: All active decisions referenced or exempt.
+  INFO: Metrics: active_decisions=17, active_tasks=7, blocked=0,
+        dead_decisions=0, incidents=3, decision_coverage=100%
+
+=== 3. DECISION IMPACT GRAPH ===
+  OK: Built impact graph: 11 decision(s) with edges.
+
+=== 4. STATE SNAPSHOT ===
+  OK: Snapshot saved.
+
+=== 5. WEEKLY BRIEFING ===
+  OK: Briefing generated.
+
+TOTAL: 0 critical | 0 warnings | 16 info
+```
+
+```
+$ bash maintenance/validate.sh .
+
+TOTAL: 83 checks | 83 passed | 0 issues | 0 warnings
+```
 
 ---
 
@@ -367,6 +418,20 @@ ConstraintSignature:
 ```
 
 Blocks are parsed by `block_parser.py` — a zero-dependency markdown parser that extracts `[ID]` headers and `Key: Value` fields into structured dicts.
+
+---
+
+## Specification
+
+For the formal grammar, invariant rules, state machine, and atomicity guarantees, see **[SPEC.md](SPEC.md)**.
+
+Covers:
+- Block grammar (EBNF)
+- Proposal grammar
+- ConstraintSignature grammar
+- Mode state machine
+- Apply atomicity guarantees
+- Invariant lock rules
 
 ---
 
