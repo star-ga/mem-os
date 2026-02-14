@@ -246,6 +246,8 @@ def restore_snapshot(ws, snap_dir):
 
     Uses rmtree + copytree to ensure files created during a failed
     transaction are removed, not just overwritten.
+    Restores intelligence files individually (skipping intelligence/applied/
+    to prevent deleting the snapshot itself).
     """
     for d in SNAPSHOT_DIRS:
         src = os.path.join(snap_dir, d)
@@ -254,6 +256,22 @@ def restore_snapshot(ws, snap_dir):
             if os.path.isdir(dst):
                 shutil.rmtree(dst)
             shutil.copytree(src, dst)
+
+    # Restore intelligence files (skip applied/ to avoid deleting active snapshots)
+    intel_snap = os.path.join(snap_dir, "intelligence")
+    intel_ws = os.path.join(ws, "intelligence")
+    if os.path.isdir(intel_snap):
+        for item in os.listdir(intel_snap):
+            if item == "applied":
+                continue
+            src = os.path.join(intel_snap, item)
+            dst = os.path.join(intel_ws, item)
+            if os.path.isfile(src):
+                shutil.copy2(src, dst)
+            elif os.path.isdir(src):
+                if os.path.isdir(dst):
+                    shutil.rmtree(dst)
+                shutil.copytree(src, dst)
 
     for f in SNAPSHOT_FILES:
         src = os.path.join(snap_dir, f)
@@ -608,8 +626,9 @@ def compute_fingerprint(proposal):
 
 
 def check_fingerprint_dedup(ws, proposal):
-    """Check if a proposal with same fingerprint already exists (staged or deferred)."""
+    """Check if a different proposal with same fingerprint already exists (staged or deferred)."""
     fp = compute_fingerprint(proposal)
+    my_id = proposal.get("ProposalId", proposal.get("_id", ""))
     for pfile in PROPOSED_FILES:
         path = os.path.join(ws, pfile)
         if not os.path.isfile(path):
@@ -617,9 +636,12 @@ def check_fingerprint_dedup(ws, proposal):
         blocks = parse_file(path)
         for b in blocks:
             if b.get("Status") in ("staged", "deferred"):
+                bid = b.get("ProposalId", b.get("_id", ""))
+                if bid == my_id:
+                    continue  # Skip self
                 existing_fp = b.get("Fingerprint", "")
                 if existing_fp == fp:
-                    return True, b.get("ProposalId", b.get("_id", "?"))
+                    return True, bid
     return False, None
 
 
@@ -645,8 +667,10 @@ def check_no_touch_window(ws):
         return True, "No previous apply"
     try:
         last = datetime.fromisoformat(last_ts.replace("Z", "+00:00"))
-        now = datetime.now(last.tzinfo) if last.tzinfo else datetime.now()
-        delta = now - last.replace(tzinfo=None) if last.tzinfo else now - last
+        # Normalize both to naive for safe comparison
+        last_naive = last.replace(tzinfo=None)
+        now_naive = datetime.now()
+        delta = now_naive - last_naive
         if delta < timedelta(minutes=10):
             remaining = timedelta(minutes=10) - delta
             return False, f"No-touch window: {remaining.seconds // 60}m {remaining.seconds % 60}s remaining"
@@ -900,8 +924,8 @@ def _mark_proposal_status(source_file, proposal_id, new_status):
                 break
         with open(source_file, "w") as f:
             f.write("\n".join(lines))
-    except (OSError, IOError, json.JSONDecodeError):
-        pass  # Non-critical — receipt is the primary record
+    except (OSError, IOError, json.JSONDecodeError) as e:
+        print(f"WARNING: Could not update proposal status in {source_file}: {e}", file=sys.stderr)
 
 
 def rollback(ws, receipt_ts):

@@ -8,7 +8,12 @@ import tempfile
 import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
-from apply_engine import _safe_resolve, validate_proposal, create_snapshot, restore_snapshot
+from apply_engine import (
+    _safe_resolve, validate_proposal, create_snapshot, restore_snapshot,
+    check_no_touch_window, check_fingerprint_dedup, compute_fingerprint,
+)
+import json
+from datetime import datetime, timedelta
 
 
 class TestSafeResolve(unittest.TestCase):
@@ -158,6 +163,108 @@ class TestSnapshotRollback(unittest.TestCase):
 
             with open(original) as f:
                 self.assertEqual(f.read(), "original content")
+
+
+class TestSnapshotIntelligenceRestore(unittest.TestCase):
+    """Verify snapshot restore includes intelligence files."""
+
+    def test_rollback_restores_intelligence_files(self):
+        """Intelligence files (e.g., SIGNALS.md) must be restored on rollback."""
+        with tempfile.TemporaryDirectory() as ws:
+            os.makedirs(os.path.join(ws, "decisions"))
+            os.makedirs(os.path.join(ws, "intelligence"))
+            signals = os.path.join(ws, "intelligence", "SIGNALS.md")
+            with open(signals, "w") as f:
+                f.write("original signals")
+            with open(os.path.join(ws, "decisions", "DECISIONS.md"), "w") as f:
+                f.write("# D\n")
+
+            snap_dir = create_snapshot(ws, "test-intel")
+
+            # Mutate intelligence file
+            with open(signals, "w") as f:
+                f.write("mutated signals")
+
+            restore_snapshot(ws, snap_dir)
+
+            with open(signals) as f:
+                self.assertEqual(f.read(), "original signals")
+
+
+class TestNoTouchWindow(unittest.TestCase):
+    """Verify no-touch window cooldown logic."""
+
+    def test_no_previous_apply(self):
+        with tempfile.TemporaryDirectory() as ws:
+            os.makedirs(os.path.join(ws, "memory"))
+            with open(os.path.join(ws, "memory", "intel-state.json"), "w") as f:
+                json.dump({}, f)
+            ok, reason = check_no_touch_window(ws)
+            self.assertTrue(ok)
+
+    def test_recent_apply_blocks(self):
+        with tempfile.TemporaryDirectory() as ws:
+            os.makedirs(os.path.join(ws, "memory"))
+            recent = datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ")
+            with open(os.path.join(ws, "memory", "intel-state.json"), "w") as f:
+                json.dump({"last_apply_ts": recent}, f)
+            ok, reason = check_no_touch_window(ws)
+            self.assertFalse(ok)
+            self.assertIn("No-touch window", reason)
+
+    def test_old_apply_clears(self):
+        with tempfile.TemporaryDirectory() as ws:
+            os.makedirs(os.path.join(ws, "memory"))
+            old = (datetime.now() - timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
+            with open(os.path.join(ws, "memory", "intel-state.json"), "w") as f:
+                json.dump({"last_apply_ts": old}, f)
+            ok, reason = check_no_touch_window(ws)
+            self.assertTrue(ok)
+
+
+class TestFingerprintDedup(unittest.TestCase):
+    """Verify fingerprint dedup skips self-match."""
+
+    def test_self_match_not_duplicate(self):
+        with tempfile.TemporaryDirectory() as ws:
+            os.makedirs(os.path.join(ws, "intelligence", "proposed"), exist_ok=True)
+            proposal = {
+                "ProposalId": "P-20260214-001", "_id": "P-20260214-001",
+                "Type": "decision", "TargetBlock": "D-20260214-001",
+                "Ops": [{"op": "append_block", "file": "decisions/DECISIONS.md"}],
+                "Status": "staged",
+            }
+            fp = compute_fingerprint(proposal)
+            block_text = (
+                "[P-20260214-001]\n"
+                "ProposalId: P-20260214-001\n"
+                "Type: decision\n"
+                "TargetBlock: D-20260214-001\n"
+                "Status: staged\n"
+                f"Fingerprint: {fp}\n"
+            )
+            for fn in ["DECISIONS_PROPOSED.md", "TASKS_PROPOSED.md", "EDITS_PROPOSED.md"]:
+                path = os.path.join(ws, "intelligence", "proposed", fn)
+                with open(path, "w") as f:
+                    f.write(block_text if fn == "DECISIONS_PROPOSED.md" else "")
+            is_dup, dup_id = check_fingerprint_dedup(ws, proposal)
+            self.assertFalse(is_dup)
+
+
+class TestFreshInitValidate(unittest.TestCase):
+    """Verify fresh workspace passes validate.sh with 0 issues."""
+
+    def test_fresh_init_passes_validate(self):
+        with tempfile.TemporaryDirectory() as ws:
+            from init_workspace import init
+            init(ws)
+            import subprocess
+            result = subprocess.run(
+                ["bash", os.path.join(ws, "maintenance", "validate.sh"), ws],
+                capture_output=True, text=True, timeout=30,
+            )
+            self.assertEqual(result.returncode, 0, f"validate.sh failed:\n{result.stdout}")
+            self.assertIn("0 issues", result.stdout)
 
 
 if __name__ == "__main__":

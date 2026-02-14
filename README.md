@@ -205,8 +205,10 @@ TOTAL: 0 critical | 0 warnings | 16 info
 ```
 $ bash maintenance/validate.sh .
 
-TOTAL: 83 checks | 83 passed | 0 issues | 0 warnings
+TOTAL: 73 checks | 73 passed | 0 issues | 1 warnings
 ```
+
+> Note: Check count scales with data — fresh workspaces have ~73 checks, populated workspaces have more. The 1 warning is expected (no weekly summaries yet).
 
 ---
 
@@ -403,7 +405,7 @@ User reviews signals
 All structured data uses a simple, parseable markdown format:
 
 ```markdown
-## [D-20260213-001]
+[D-20260213-001]
 Date: 2026-02-13
 Status: active
 Statement: Use PostgreSQL for the user database

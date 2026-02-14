@@ -11,7 +11,7 @@ Run the intelligence scanner to detect contradictions, drift, dead decisions, an
 ## How to Run
 
 ```bash
-python3 scripts/intel_scan.py "${MEM_OS_WORKSPACE:-.}"
+python3 maintenance/intel_scan.py "${MEM_OS_WORKSPACE:-.}"
 ```
 
 ## What It Checks
@@ -23,14 +23,13 @@ python3 scripts/intel_scan.py "${MEM_OS_WORKSPACE:-.}"
 6. **Coverage** — How many files are monitored vs total
 
 ## Output
-- Updates `intelligence/CONTRADICTIONS.md`, `intelligence/DRIFT.md`
-- Generates proposals in `intelligence/proposed/` (if in propose mode)
-- Updates `intelligence/SCAN_LOG.md` with run results
-- Updates `memory/intel-state.json` with latest metrics
+- Updates `intelligence/CONTRADICTIONS.md`, `intelligence/DRIFT.md`, `intelligence/IMPACT.md`
+- Updates `memory/intel-state.json` with latest metrics and counters
+- Saves state snapshot in `intelligence/state/snapshots/`
+- Generates `intelligence/BRIEFINGS.md` weekly briefing
 
 ## Modes
 - `detect_only` — Report issues, never propose changes (default)
-- `propose` — Report issues AND generate fix proposals
-- `apply` — Auto-apply approved proposals (use with caution)
+- `propose` — Report issues AND generate fix proposals in `intelligence/proposed/`
 
-Check current mode: `cat memory/intel-state.json | grep self_correcting_mode`
+Check current mode: `cat memory/intel-state.json | python3 -c "import json,sys;print(json.load(sys.stdin)['self_correcting_mode'])"`

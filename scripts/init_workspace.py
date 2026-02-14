@@ -59,6 +59,8 @@ MAINTENANCE_SCRIPTS = [
     "intel_scan.py",
     "apply_engine.py",
     "block_parser.py",
+    "recall.py",
+    "capture.py",
     "validate.sh",
 ]
 

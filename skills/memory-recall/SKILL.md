@@ -12,17 +12,17 @@ Lexical search across all structured memory files. Default backend: TF-IDF with 
 
 ### Basic Search
 ```bash
-python3 scripts/recall.py --query "authentication" --workspace "${MEM_OS_WORKSPACE:-.}"
+python3 maintenance/recall.py --query "authentication" --workspace "${MEM_OS_WORKSPACE:-.}"
 ```
 
 ### JSON Output (for programmatic use)
 ```bash
-python3 scripts/recall.py --query "auth" --workspace "${MEM_OS_WORKSPACE:-.}" --json --limit 5
+python3 maintenance/recall.py --query "auth" --workspace "${MEM_OS_WORKSPACE:-.}" --json --limit 5
 ```
 
 ### Active Items Only
 ```bash
-python3 scripts/recall.py --query "deadline" --workspace "${MEM_OS_WORKSPACE:-.}" --active-only
+python3 maintenance/recall.py --query "deadline" --workspace "${MEM_OS_WORKSPACE:-.}" --active-only
 ```
 
 ## What It Searches

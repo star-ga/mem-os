@@ -42,7 +42,7 @@ weekly_count=$(find "$WS/summaries/weekly" -name '*.md' 2>/dev/null | wc -l || t
 if [[ "$weekly_count" -gt 0 ]]; then
   pass "summaries/weekly/ has $weekly_count file(s)"
 else
-  fail "summaries/weekly/ has no .md files"
+  warn "summaries/weekly/ has no .md files (expected for new workspaces)"
 fi
 
 if [[ -f "$WS/memory/maint-state.json" ]]; then
@@ -294,8 +294,8 @@ section "6. CROSS-REFERENCE INTEGRITY"
 # ═══════════════════════════════════════════
 
 # Build truth sets
-TMP="/tmp/memos_validate_$$"
-mkdir -p "$TMP"
+TMP=$(mktemp -d "${TMPDIR:-/tmp}/memos_validate.XXXXXX")
+trap 'rm -rf "$TMP"' EXIT
 
 grep -hoE '^\[D-[0-9]{8}-[0-9]{3}\]$' "$WS/decisions/DECISIONS.md" 2>/dev/null | tr -d '[]' | sort -u > "$TMP/ids_d.txt" || true
 grep -hoE '^\[T-[0-9]{8}-[0-9]{3}\]$' "$WS/tasks/TASKS.md" 2>/dev/null | tr -d '[]' | sort -u > "$TMP/ids_t.txt" || true
@@ -304,10 +304,11 @@ grep -hoE '^\[PRJ-[a-z0-9-]+\]$' "$WS/entities/projects.md" 2>/dev/null | tr -d 
 grep -hoE '^\[PER-[a-z0-9-]+\]$' "$WS/entities/people.md" 2>/dev/null | tr -d '[]' | sort -u > "$TMP/ids_per.txt" || true
 grep -hoE '^\[TOOL-[a-z0-9-]+\]$' "$WS/entities/tools.md" 2>/dev/null | tr -d '[]' | sort -u > "$TMP/ids_tool.txt" || true
 
-# Collect all references across corpus
-grep -RhoE '\b(D-[0-9]{8}-[0-9]{3}|T-[0-9]{8}-[0-9]{3}|INC-[0-9]{8}-[a-z0-9-]+|PRJ-[a-z0-9-]+|PER-[a-z0-9-]+|TOOL-[a-z0-9-]+)\b' \
+# Collect all references across corpus (exclude schema/comment lines starting with >)
+grep -RnE '\b(D-[0-9]{8}-[0-9]{3}|T-[0-9]{8}-[0-9]{3}|INC-[0-9]{8}-[a-z0-9-]+|PRJ-[a-z0-9-]+|PER-[a-z0-9-]+|TOOL-[a-z0-9-]+)\b' \
   "$WS/decisions" "$WS/tasks" "$WS/entities" "$WS/summaries" "$WS/maintenance/MAINTENANCE.md" \
-  --include='*.md' 2>/dev/null | sort -u > "$TMP/all_refs.txt" || true
+  --include='*.md' 2>/dev/null | grep -vE '^\S+:.*>[[:space:]]+Schema:' | grep -hoE '\b(D-[0-9]{8}-[0-9]{3}|T-[0-9]{8}-[0-9]{3}|INC-[0-9]{8}-[a-z0-9-]+|PRJ-[a-z0-9-]+|PER-[a-z0-9-]+|TOOL-[a-z0-9-]+)\b' \
+  | sort -u > "$TMP/all_refs.txt" || true
 
 dangling=0
 
@@ -326,8 +327,6 @@ done
 if [[ "$dangling" -eq 0 ]]; then
   pass "All cross-references resolve to defined IDs"
 fi
-
-rm -rf "$TMP"
 
 # ═══════════════════════════════════════════
 section "7. SUPERSEDED CHAIN"
@@ -384,10 +383,10 @@ section "9. v2.0 CHECKS (warnings only)"
 # V2.1: Active decisions with integrity/security/memory/retrieval tags must have ConstraintSignatures
 if [[ -f "$DEC_FILE" ]]; then
   # Get IDs of active decisions with relevant tags
-  needs_sig=$(python3 -c "
-import sys; sys.path.insert(0, '$WS/maintenance')
+  needs_sig=$(MEM_OS_WS="$WS" MEM_OS_DECFILE="$DEC_FILE" python3 -c "
+import os, sys; sys.path.insert(0, os.path.join(os.environ['MEM_OS_WS'], 'maintenance'))
 from block_parser import parse_file
-blocks = parse_file('$DEC_FILE')
+blocks = parse_file(os.environ['MEM_OS_DECFILE'])
 required_tags = {'integrity','security','memory','retrieval'}
 for b in blocks:
     if b.get('Status') != 'active': continue
@@ -409,10 +408,10 @@ fi
 
 # V2.2: ConstraintSignatures have required fields
 if [[ -f "$DEC_FILE" ]]; then
-  sig_issues=$(python3 -c "
-import sys; sys.path.insert(0, '$WS/maintenance')
+  sig_issues=$(MEM_OS_WS="$WS" MEM_OS_DECFILE="$DEC_FILE" python3 -c "
+import os, sys; sys.path.insert(0, os.path.join(os.environ['MEM_OS_WS'], 'maintenance'))
 from block_parser import parse_file
-blocks = parse_file('$DEC_FILE')
+blocks = parse_file(os.environ['MEM_OS_DECFILE'])
 required = ['id','domain','subject','predicate','object','modality','priority','scope','evidence']
 for b in blocks:
     for sig in b.get('ConstraintSignatures', []):
@@ -432,10 +431,10 @@ fi
 
 # V2.3: domain and modality in valid enums, priority in 1-10
 if [[ -f "$DEC_FILE" ]]; then
-  enum_issues=$(python3 -c "
-import sys; sys.path.insert(0, '$WS/maintenance')
+  enum_issues=$(MEM_OS_WS="$WS" MEM_OS_DECFILE="$DEC_FILE" python3 -c "
+import os, sys; sys.path.insert(0, os.path.join(os.environ['MEM_OS_WS'], 'maintenance'))
 from block_parser import parse_file
-blocks = parse_file('$DEC_FILE')
+blocks = parse_file(os.environ['MEM_OS_DECFILE'])
 valid_domains = {'integrity','memory','retrieval','security','llm_strategy','workflow','project','comms','finance','other'}
 valid_modalities = {'must','must_not','should','should_not','may'}
 for b in blocks:
@@ -463,10 +462,10 @@ fi
 
 # V2.4: AlignsWith field present on active tasks
 if [[ -f "$TASK_FILE" ]]; then
-  align_issues=$(python3 -c "
-import sys; sys.path.insert(0, '$WS/maintenance')
+  align_issues=$(MEM_OS_WS="$WS" MEM_OS_TASKFILE="$TASK_FILE" python3 -c "
+import os, sys; sys.path.insert(0, os.path.join(os.environ['MEM_OS_WS'], 'maintenance'))
 from block_parser import parse_file
-blocks = parse_file('$TASK_FILE')
+blocks = parse_file(os.environ['MEM_OS_TASKFILE'])
 for b in blocks:
     if b.get('Status') in ('todo','doing','blocked'):
         aligns = b.get('AlignsWith','')
@@ -501,10 +500,10 @@ fi
 
 # V2.6: v1.1 signature fields: axis.key, relation, enforcement present
 if [[ -f "$DEC_FILE" ]]; then
-  v11_issues=$(python3 -c "
-import sys; sys.path.insert(0, '$WS/maintenance')
+  v11_issues=$(MEM_OS_WS="$WS" MEM_OS_DECFILE="$DEC_FILE" python3 -c "
+import os, sys; sys.path.insert(0, os.path.join(os.environ['MEM_OS_WS'], 'maintenance'))
 from block_parser import parse_file
-blocks = parse_file('$DEC_FILE')
+blocks = parse_file(os.environ['MEM_OS_DECFILE'])
 valid_relations = {'standalone','requires','implies','composes_with','overrides','equivalent'}
 valid_enforcement = {'invariant','structural','policy','guideline'}
 for b in blocks:
@@ -532,10 +531,10 @@ fi
 
 # V2.7: lifecycle.created_by present on all signatures
 if [[ -f "$DEC_FILE" ]]; then
-  lc_issues=$(python3 -c "
-import sys; sys.path.insert(0, '$WS/maintenance')
+  lc_issues=$(MEM_OS_WS="$WS" MEM_OS_DECFILE="$DEC_FILE" python3 -c "
+import os, sys; sys.path.insert(0, os.path.join(os.environ['MEM_OS_WS'], 'maintenance'))
 from block_parser import parse_file
-blocks = parse_file('$DEC_FILE')
+blocks = parse_file(os.environ['MEM_OS_DECFILE'])
 for b in blocks:
     for sig in b.get('ConstraintSignatures', []):
         sid = sig.get('id','?')

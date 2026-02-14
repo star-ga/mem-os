@@ -58,10 +58,10 @@ Value         ::= { AnyChar }                       (* until NewLine *)
 ### Status Values
 
 ```ebnf
-DecisionStatus ::= "active" | "superseded" | "archived" | "draft"
+DecisionStatus ::= "active" | "superseded" | "revoked"
 TaskStatus     ::= "todo" | "doing" | "done" | "blocked" | "canceled"
 SignalStatus   ::= "pending" | "accepted" | "rejected"
-ProposalStatus ::= "pending" | "approved" | "applied" | "rejected" | "deferred"
+ProposalStatus ::= "staged" | "applied" | "rejected" | "deferred" | "expired" | "rolled_back"
 ```
 
 ---
@@ -105,15 +105,22 @@ Modality      ::= "must" | "should" | "may"
 
 ### Contradiction Detection Rule
 
-Two signatures **contradict** if and only if:
+Two signatures **contradict** if all of the following hold:
 
 ```
-sig_a.axis.key == sig_b.axis.key
-AND sig_a.object != sig_b.object
-AND sig_a.enforcement == "hard"
-AND sig_b.enforcement == "hard"
-AND both parent decisions have Status == "active"
+1. sig_a.axis.key == sig_b.axis.key
+2. Both parent decisions have Status == "active"
+3. Scopes overlap (time ranges and project sets intersect)
+4. Neither signature lists the other in its composes_with set
+5. At least one of:
+   a. Modality conflict: (must vs must_not) or (must_not vs must) → critical
+   b. Competing requirements: same predicate, different objects,
+      both modalities in {must, must_not} → critical
+   c. Preference tension: same predicate, different objects,
+      both modalities in {should, should_not} → warning
 ```
+
+Signatures with `relation: composes_with` or `relation: requires` (both) are exempt.
 
 ---
 
@@ -130,13 +137,12 @@ ProposalBody  ::= ProposalType NewLine
                   ProposalStatus NewLine
                   { ProposalField NewLine }
 
-ProposalType  ::= "Type:" Space ("new_decision" | "new_task" | "supersede"
-                  | "status_change" | "merge" | "archive")
-ProposalTarget ::= "Target:" Space BlockID
-ProposalAction ::= "Action:" Space ActionDesc
-ProposalReason ::= "Reason:" Space ReasonDesc
-ProposalStatus ::= "Status:" Space ("pending" | "approved" | "applied"
-                  | "rejected" | "deferred")
+ProposalType  ::= "Type:" Space ("decision" | "task" | "edit")
+ProposalTarget ::= "TargetBlock:" Space BlockID
+ProposalAction ::= "Ops:" Space OpsBlock
+ProposalReason ::= "Evidence:" Space EvidenceList
+ProposalStatus ::= "Status:" Space ("staged" | "applied" | "rejected"
+                  | "deferred" | "expired" | "rolled_back")
 ```
 
 ### Proposal Invariants
@@ -229,7 +235,7 @@ The apply engine provides ACID-like guarantees for memory mutations.
 2. **Snapshot before mutate**: No file is modified until a snapshot is taken
 3. **Post-validate**: Every apply is followed by structural validation
 4. **Rollback on failure**: If validation fails, all files revert to pre-apply state
-5. **Receipt required**: Every apply produces a receipt in `intelligence/AUDIT.md`
+5. **Receipt required**: Every apply produces an `APPLY_RECEIPT.md` in its snapshot directory (`intelligence/applied/<timestamp>/`)
 6. **No cascade**: One proposal per apply. No proposal may trigger another proposal
 
 ### Apply Receipt Format
@@ -281,10 +287,10 @@ These invariants MUST hold at all times. Any operation that would violate them M
 |---|---|---|
 | O1 | Apply engine takes snapshot before any mutation | apply_engine.py |
 | O2 | Apply engine rolls back on post-check failure | apply_engine.py |
-| O3 | Every applied proposal produces an audit receipt | apply_engine.py |
+| O3 | Every applied proposal produces a receipt in its snapshot directory | apply_engine.py |
 | O4 | No cascade: proposals cannot trigger other proposals | apply_engine.py |
 | O5 | init_workspace.py never overwrites existing files | init_workspace.py |
-| O6 | validate.sh is idempotent and side-effect-free | validate.sh |
+| O6 | validate.sh is idempotent (writes report to `maintenance/validation-report.txt`) | validate.sh |
 
 ---
 

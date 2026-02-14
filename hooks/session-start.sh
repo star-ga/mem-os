@@ -18,7 +18,7 @@ try:
     d = json.load(open(os.environ['MEM_OS_STATE']))
     print(d.get('self_correcting_mode', 'unknown'),
           d.get('last_scan', 'never'),
-          d.get('contradictions_open', 0))
+          d.get('counters', {}).get('contradictions_open', 0))
 except Exception:
     print('unknown never 0')
 ")
