@@ -49,7 +49,7 @@ XREF_PATTERN = re.compile(r"\b[DT]-\d{8}-\d{3}\b")
 
 def find_today_log(workspace):
     """Find today's daily log file."""
-    today = datetime.utcnow().strftime("%Y-%m-%d")
+    today = datetime.now().strftime("%Y-%m-%d")
     path = os.path.join(workspace, "memory", f"{today}.md")
     if os.path.isfile(path):
         return path, today
@@ -122,7 +122,7 @@ def append_signals(workspace, signals, date_str):
     with open(signals_path, "a") as f:
         for sig in new_signals:
             sig_id = f"SIG-{today_compact}-{counter:03d}"
-            f.write(f"\n## [{sig_id}]\n")
+            f.write(f"\n[{sig_id}]\n")
             f.write(f"Date: {date_str}\n")
             f.write(f"Type: auto-capture-{sig['type']}\n")
             f.write(f"Source: memory/{date_str}.md:{sig['line']}\n")

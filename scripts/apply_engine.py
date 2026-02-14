@@ -48,11 +48,29 @@ PROPOSED_FILES = [
     "intelligence/proposed/EDITS_PROPOSED.md",
 ]
 
-# Files to snapshot for rollback
+# Files to snapshot for rollback (intelligence/applied excluded to prevent recursive nesting)
 SNAPSHOT_DIRS = [
-    "decisions", "tasks", "entities", "summaries", "intelligence", "memory", "maintenance"
+    "decisions", "tasks", "entities", "summaries", "memory", "maintenance"
 ]
 SNAPSHOT_FILES = ["AGENTS.md", "MEMORY.md", "IDENTITY.md"]
+
+
+# ═══════════════════════════════════════════════
+# Path Safety
+# ═══════════════════════════════════════════════
+
+def _safe_resolve(ws, rel_path):
+    """Resolve rel_path within ws, rejecting traversal and symlink escapes.
+
+    Returns the resolved absolute path.
+    Raises ValueError if the path escapes the workspace.
+    """
+    ws_real = os.path.realpath(ws)
+    joined = os.path.join(ws, rel_path)
+    resolved = os.path.realpath(joined)
+    if not resolved.startswith(ws_real + os.sep) and resolved != ws_real:
+        raise ValueError(f"Path escapes workspace: {rel_path}")
+    return resolved
 
 
 # ═══════════════════════════════════════════════
@@ -110,6 +128,12 @@ def validate_proposal(proposal):
                         "insert_after_block", "supersede_decision") and not op.get("target"):
             errors.append(f"Ops[{i}]: op '{op_type}' requires 'target'")
 
+    # Reject paths with traversal components
+    for i, op in enumerate(ops):
+        f = op.get("file", "")
+        if ".." in f.split(os.sep) or ".." in f.split("/") or os.path.isabs(f):
+            errors.append(f"Ops[{i}]: path '{f}' contains traversal or is absolute")
+
     # FilesTouched must match Ops files
     files_touched = set(proposal.get("FilesTouched", []))
     ops_files = set(op.get("file", "") for op in ops)
@@ -139,7 +163,7 @@ def check_preconditions(ws):
             if "issues" in line and "TOTAL" in line:
                 total_line = line.strip()
                 break
-        if "0 issues" in total_line:
+        if re.search(r"\b0 issues\b", total_line):
             report.append(f"validate: PASS ({total_line})")
         else:
             report.append(f"validate: FAIL ({total_line or 'no TOTAL line found'})")
@@ -177,7 +201,13 @@ def check_preconditions(ws):
 # ═══════════════════════════════════════════════
 
 def create_snapshot(ws, ts):
-    """Create a pre-apply snapshot for rollback."""
+    """Create a pre-apply snapshot for rollback.
+
+    Copies workspace state for rollback. The intelligence/applied/ directory
+    is excluded to prevent recursive nesting (snapshots containing snapshots).
+    Intelligence files (SIGNALS.md, CONTRADICTIONS.md, etc.) are copied
+    individually instead.
+    """
     snap_dir = os.path.join(ws, "intelligence/applied", ts)
     os.makedirs(snap_dir, exist_ok=True)
 
@@ -186,6 +216,22 @@ def create_snapshot(ws, ts):
         dst = os.path.join(snap_dir, d)
         if os.path.isdir(src):
             shutil.copytree(src, dst, dirs_exist_ok=True)
+
+    # Copy intelligence files individually (NOT recursively) to avoid
+    # snapshotting intelligence/applied/ into itself
+    intel_src = os.path.join(ws, "intelligence")
+    intel_dst = os.path.join(snap_dir, "intelligence")
+    os.makedirs(intel_dst, exist_ok=True)
+    if os.path.isdir(intel_src):
+        for item in os.listdir(intel_src):
+            src_path = os.path.join(intel_src, item)
+            dst_path = os.path.join(intel_dst, item)
+            if item == "applied":
+                continue  # Skip to prevent recursive nesting
+            if os.path.isfile(src_path):
+                shutil.copy2(src_path, dst_path)
+            elif os.path.isdir(src_path):
+                shutil.copytree(src_path, dst_path, dirs_exist_ok=True)
 
     for f in SNAPSHOT_FILES:
         src = os.path.join(ws, f)
@@ -269,7 +315,13 @@ def _get_mode(ws="."):
 def execute_op(ws, op):
     """Execute a single op. Returns (success, message)."""
     op_type = op.get("op")
-    filepath = os.path.join(ws, op.get("file", ""))
+    raw_file = op.get("file", "")
+
+    # Security: reject path traversal and symlink escape
+    try:
+        filepath = _safe_resolve(ws, raw_file)
+    except ValueError as e:
+        return False, f"SECURITY: {e}"
 
     if not os.path.isfile(filepath):
         return False, f"File not found: {filepath}"
@@ -291,7 +343,7 @@ def execute_op(ws, op):
             return _op_supersede_decision(filepath, op)
         else:
             return False, f"Unknown op: {op_type}"
-    except Exception as e:
+    except (OSError, IOError, ValueError, KeyError, IndexError) as e:
         return False, f"Op {op_type} failed: {e}"
 
 
@@ -842,7 +894,7 @@ def _mark_proposal_status(source_file, proposal_id, new_status):
                 break
         with open(source_file, "w") as f:
             f.write("\n".join(lines))
-    except Exception:
+    except (OSError, IOError, json.JSONDecodeError):
         pass  # Non-critical — receipt is the primary record
 
 

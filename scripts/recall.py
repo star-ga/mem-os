@@ -130,7 +130,7 @@ def date_score(block):
     try:
         from datetime import datetime
         d = datetime.strptime(date_str[:10], "%Y-%m-%d")
-        now = datetime.utcnow()
+        now = datetime.now()
         days_old = (now - d).days
         if days_old <= 0:
             return 1.0
@@ -242,7 +242,7 @@ def _load_backend(workspace):
                     return VectorBackend(cfg.get("recall", {}))
                 except ImportError:
                     pass  # fall through to TF-IDF
-        except Exception:
+        except (OSError, json.JSONDecodeError, KeyError):
             pass
     return None  # use built-in TF-IDF
 
@@ -261,7 +261,8 @@ def main():
     if backend:
         try:
             results = backend.search(args.workspace, args.query, args.limit, args.active_only)
-        except Exception:
+        except (OSError, ValueError, TypeError) as e:
+            print(f"recall: backend error ({e}), falling back to TF-IDF", file=sys.stderr)
             results = recall(args.workspace, args.query, args.limit, args.active_only)
     else:
         results = recall(args.workspace, args.query, args.limit, args.active_only)

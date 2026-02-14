@@ -10,7 +10,7 @@ All structured data in Mem OS is stored as **blocks** — markdown sections with
 
 ```ebnf
 Block         ::= Header NewLine Body
-Header        ::= "## [" BlockID "]"
+Header        ::= "[" BlockID "]"
 BlockID       ::= Prefix "-" DatePart "-" Counter
                  | Prefix "-" Counter
 

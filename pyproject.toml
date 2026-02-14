@@ -1,0 +1,36 @@
+[project]
+name = "mem-os"
+version = "1.0.0"
+description = "Memory OS — structured memory + integrity immune system for AI agents"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.8"
+authors = [
+    { name = "STARGA Inc", email = "noreply@star.ga" }
+]
+keywords = ["memory", "ai-agent", "integrity", "recall", "intelligence"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Libraries",
+]
+
+[project.urls]
+Homepage = "https://github.com/star-ga/mem-os"
+Repository = "https://github.com/star-ga/mem-os"
+Issues = "https://github.com/star-ga/mem-os/issues"
+
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[tool.setuptools]
+packages = []

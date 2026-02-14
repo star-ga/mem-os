@@ -10,13 +10,16 @@ if [ ! -f "$STATE" ]; then
   exit 0
 fi
 
-# Extract key fields from intel-state.json using grep/sed (no jq dependency)
-MODE=$(grep -o '"self_correcting_mode"[[:space:]]*:[[:space:]]*"[^"]*"' "$STATE" 2>/dev/null | head -1 | sed 's/.*: *"\(.*\)"/\1/' || true)
-LAST=$(grep -o '"last_scan"[[:space:]]*:[[:space:]]*"[^"]*"' "$STATE" 2>/dev/null | head -1 | sed 's/.*: *"\(.*\)"/\1/' || true)
-CONTRADICTIONS=$(grep -o '"contradictions_open"[[:space:]]*:[[:space:]]*[0-9]*' "$STATE" 2>/dev/null | head -1 | sed 's/.*: *//' || true)
-
-MODE="${MODE:-unknown}"
-LAST="${LAST:-never}"
-CONTRADICTIONS="${CONTRADICTIONS:-0}"
+# Parse JSON with python3 (robust, no jq dependency)
+read -r MODE LAST CONTRADICTIONS < <(python3 -c "
+import json, sys
+try:
+    d = json.load(open('$STATE'))
+    print(d.get('self_correcting_mode', 'unknown'),
+          d.get('last_scan', 'never'),
+          d.get('contradictions_open', 0))
+except Exception:
+    print('unknown never 0')
+")
 
 echo "SessionStart:compact mem-os health: mode=$MODE last_scan=$LAST contradictions=$CONTRADICTIONS"
