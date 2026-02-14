@@ -50,7 +50,7 @@ PROPOSED_FILES = [
 
 # Files to snapshot for rollback (intelligence/applied excluded to prevent recursive nesting)
 SNAPSHOT_DIRS = [
-    "decisions", "tasks", "entities", "summaries", "memory", "maintenance"
+    "decisions", "tasks", "entities", "summaries", "memory"
 ]
 SNAPSHOT_FILES = ["AGENTS.md", "MEMORY.md", "IDENTITY.md"]
 

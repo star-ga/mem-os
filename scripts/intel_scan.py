@@ -946,7 +946,7 @@ def generate_proposals(contradictions, drift_signals, ws, intel_state, report):
 
     # Check backlog limit
     staged = _count_staged_proposals(ws)
-    if staged >= backlog_limit:
+    if staged > backlog_limit:
         report.warn(f"Backlog limit reached ({staged}/{backlog_limit}) — skipping proposals.")
         return 0
 
@@ -1014,48 +1014,65 @@ def generate_proposals(contradictions, drift_signals, ws, intel_state, report):
                     "rollback": "restore_snapshot",
                 })
 
-    # Write proposals to DECISIONS_PROPOSED.md
+    # Route proposals to correct file based on Type
+    TYPE_TO_FILE = {
+        "decision": "intelligence/proposed/DECISIONS_PROPOSED.md",
+        "task": "intelligence/proposed/TASKS_PROPOSED.md",
+        "edit": "intelligence/proposed/EDITS_PROPOSED.md",
+    }
+
     if proposals:
-        proposed_path = os.path.join(ws, "intelligence/proposed/DECISIONS_PROPOSED.md")
-        with open(proposed_path, "r") as f:
-            existing = f.read()
-
-        new_blocks = []
+        # Group proposals by target file
+        by_file = {}
         for p in proposals:
-            ops_lines = "\n".join(
-                f"- op: {op['op']}\n  file: {op['file']}\n  target: {op.get('target', '')}"
-                + (f"\n  status: {op['status']}" if 'status' in op else "")
-                for op in p.get("ops", [])
-            )
-            block = (
-                f"\n[{p['id']}]\n"
-                f"ProposalId: {p['id']}\n"
-                f"Type: {p['type']}\n"
-                f"TargetBlock: {p['target']}\n"
-                f"Risk: {p['risk']}\n"
-                f"Evidence:\n- {p['evidence']}\n"
-                f"Rollback: {p.get('rollback', 'restore_snapshot')}\n"
-                f"Ops:\n{ops_lines}\n"
-                f"Status: staged\n"
-                f"Sources:\n"
-                f"- maintenance/intel-report.txt\n"
-            )
-            # Skip if already proposed
-            if p["target"] in existing and "staged" in existing:
-                continue
-            new_blocks.append(block)
+            target_file = TYPE_TO_FILE.get(p["type"], "intelligence/proposed/EDITS_PROPOSED.md")
+            by_file.setdefault(target_file, []).append(p)
 
-        if new_blocks:
-            with open(proposed_path, "a") as f:
-                for block in new_blocks:
-                    f.write(block)
+        new_blocks_total = 0
+        for target_file, file_proposals in by_file.items():
+            proposed_path = os.path.join(ws, target_file)
+            existing = ""
+            if os.path.isfile(proposed_path):
+                with open(proposed_path, "r") as f:
+                    existing = f.read()
+
+            new_blocks = []
+            for p in file_proposals:
+                ops_lines = "\n".join(
+                    f"- op: {op['op']}\n  file: {op['file']}\n  target: {op.get('target', '')}"
+                    + (f"\n  status: {op['status']}" if 'status' in op else "")
+                    for op in p.get("ops", [])
+                )
+                block = (
+                    f"\n[{p['id']}]\n"
+                    f"ProposalId: {p['id']}\n"
+                    f"Type: {p['type']}\n"
+                    f"TargetBlock: {p['target']}\n"
+                    f"Risk: {p['risk']}\n"
+                    f"Evidence:\n- {p['evidence']}\n"
+                    f"Rollback: {p.get('rollback', 'restore_snapshot')}\n"
+                    f"Ops:\n{ops_lines}\n"
+                    f"Status: staged\n"
+                    f"Sources:\n"
+                    f"- maintenance/intel-report.txt\n"
+                )
+                # Skip if already proposed
+                if p["target"] in existing and "staged" in existing:
+                    continue
+                new_blocks.append(block)
+
+            if new_blocks:
+                with open(proposed_path, "a") as f:
+                    for block in new_blocks:
+                        f.write(block)
+                new_blocks_total += len(new_blocks)
 
         # Update daily counter
         intel_state.setdefault("counters", {})
-        intel_state["counters"]["proposals_today"] = daily_count + len(new_blocks)
+        intel_state["counters"]["proposals_today"] = daily_count + new_blocks_total
         intel_state["counters"]["proposals_date"] = today
 
-        report.ok(f"Generated {len(new_blocks)} proposal(s) (budget: {remaining_run}/run, {remaining_daily}/day)")
+        report.ok(f"Generated {new_blocks_total} proposal(s) (budget: {remaining_run}/run, {remaining_daily}/day)")
     else:
         report.ok("No proposals needed.")
 

@@ -238,9 +238,10 @@ class TestE2EProposalToApply(unittest.TestCase):
         os.makedirs(os.path.join(td, "intelligence/proposed"), exist_ok=True)
         os.makedirs(os.path.join(td, "maintenance"), exist_ok=True)
 
-        # Empty proposed file for generate_proposals to append to
-        with open(os.path.join(td, "intelligence/proposed/DECISIONS_PROPOSED.md"), "w") as f:
-            f.write("# Proposed Decisions\n\n")
+        # Empty proposed files for generate_proposals to append to
+        for fname in ("DECISIONS_PROPOSED.md", "TASKS_PROPOSED.md", "EDITS_PROPOSED.md"):
+            with open(os.path.join(td, "intelligence/proposed", fname), "w") as f:
+                f.write(f"# Proposed {fname.replace('_PROPOSED.md', '').title()}\n\n")
 
         # Config with proposal mode enabled
         with open(os.path.join(td, "mem-os.json"), "w") as f:
@@ -282,8 +283,8 @@ class TestE2EProposalToApply(unittest.TestCase):
             count = generate_proposals(contradictions, [], td, intel_state, report)
             self.assertEqual(count, 1)
 
-            # Parse the generated proposal file
-            proposed_path = os.path.join(td, "intelligence/proposed/DECISIONS_PROPOSED.md")
+            # Contradiction proposals have type=edit, so they route to EDITS_PROPOSED
+            proposed_path = os.path.join(td, "intelligence/proposed/EDITS_PROPOSED.md")
             blocks = parse_file(proposed_path)
 
             # Should have at least one proposal block
@@ -329,6 +330,38 @@ class TestE2EProposalToApply(unittest.TestCase):
             count = generate_proposals(contradictions, [], td, intel_state, report)
             # per_run=1 should cap at 1 proposal
             self.assertEqual(count, 1)
+
+
+class TestProposalRouting(unittest.TestCase):
+    """Proposals must route to correct file based on Type field."""
+
+    def _scaffold(self, td):
+        os.makedirs(os.path.join(td, "intelligence/proposed"), exist_ok=True)
+        os.makedirs(os.path.join(td, "maintenance"), exist_ok=True)
+        for fname in ("DECISIONS_PROPOSED.md", "TASKS_PROPOSED.md", "EDITS_PROPOSED.md"):
+            with open(os.path.join(td, "intelligence/proposed", fname), "w") as f:
+                f.write(f"# {fname}\n\n")
+        with open(os.path.join(td, "mem-os.json"), "w") as f:
+            json.dump({"mode": "propose", "proposal_budget": {"per_run": 5, "per_day": 10, "backlog_limit": 30}}, f)
+        with open(os.path.join(td, "intelligence/intel-state.json"), "w") as f:
+            json.dump({"mode": "propose", "counters": {}}, f)
+
+    def test_edit_proposals_go_to_edits_file(self):
+        """Type=edit proposals route to EDITS_PROPOSED.md."""
+        with tempfile.TemporaryDirectory() as td:
+            self._scaffold(td)
+            contradictions = [{
+                "sig1": {"decision": "D-001", "sig": {"id": "CS-1", "priority": 5}},
+                "sig2": {"decision": "D-002", "sig": {"id": "CS-2", "priority": 3}},
+                "severity": "critical", "reason": "test",
+            }]
+            report = IntelReport()
+            generate_proposals(contradictions, [], td, {"mode": "propose", "counters": {}}, report)
+
+            edits = open(os.path.join(td, "intelligence/proposed/EDITS_PROPOSED.md")).read()
+            decisions = open(os.path.join(td, "intelligence/proposed/DECISIONS_PROPOSED.md")).read()
+            self.assertIn("ProposalId:", edits, "Edit proposals should be in EDITS_PROPOSED.md")
+            self.assertNotIn("ProposalId:", decisions, "Edit proposals should NOT be in DECISIONS_PROPOSED.md")
 
 
 if __name__ == "__main__":
