@@ -11,7 +11,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
 from apply_engine import (
     _safe_resolve, validate_proposal, create_snapshot, restore_snapshot,
     check_no_touch_window, check_fingerprint_dedup, compute_fingerprint,
-    rollback, apply_proposal,
+    rollback, apply_proposal, _op_supersede_decision, _op_replace_range,
 )
 import json
 import subprocess
@@ -586,6 +586,85 @@ class TestDeferredCooldown(unittest.TestCase):
             new_proposal = {"TargetBlock": "D-20260214-001"}
             ok, reason = check_deferred_cooldown(ws, new_proposal)
             self.assertTrue(ok, "Old rejected proposal should not block same target")
+
+
+class TestOpSupersedeDecision(unittest.TestCase):
+    """Tests for _op_supersede_decision."""
+
+    def test_supersede_marks_old_and_appends_new(self):
+        with tempfile.TemporaryDirectory() as td:
+            dec_file = os.path.join(td, "DECISIONS.md")
+            with open(dec_file, "w") as f:
+                f.write("[D-20260213-001]\nStatus: active\nStatement: Old decision\n")
+            new_block = "[D-20260213-002]\nStatus: active\nStatement: New decision\nSupersedes: D-20260213-001\n"
+            ok, msg = _op_supersede_decision(dec_file, {
+                "target": "D-20260213-001",
+                "new_block": new_block,
+            })
+            self.assertTrue(ok, msg)
+            with open(dec_file) as f:
+                content = f.read()
+            self.assertIn("Status: superseded", content)
+            self.assertIn("[D-20260213-002]", content)
+
+    def test_supersede_rejects_missing_target(self):
+        with tempfile.TemporaryDirectory() as td:
+            dec_file = os.path.join(td, "DECISIONS.md")
+            with open(dec_file, "w") as f:
+                f.write("[D-20260213-001]\nStatus: active\n")
+            ok, msg = _op_supersede_decision(dec_file, {
+                "target": "D-20260213-999",
+                "new_block": "[D-20260213-002]\nStatus: active\n",
+            })
+            self.assertFalse(ok)
+            self.assertIn("not found", msg)
+
+    def test_supersede_rejects_invariant(self):
+        with tempfile.TemporaryDirectory() as td:
+            dec_file = os.path.join(td, "DECISIONS.md")
+            with open(dec_file, "w") as f:
+                f.write("[D-20260213-001]\nStatus: active\nStatement: Invariant\n"
+                        "ConstraintSignatures:\n- id: CS-001\n  enforcement: invariant\n")
+            ok, msg = _op_supersede_decision(dec_file, {
+                "target": "D-20260213-001",
+                "new_block": "[D-20260213-002]\nStatus: active\n",
+            })
+            self.assertFalse(ok)
+            self.assertIn("invariant", msg)
+
+
+class TestOpReplaceRange(unittest.TestCase):
+    """Tests for _op_replace_range."""
+
+    def test_replaces_between_markers(self):
+        with tempfile.TemporaryDirectory() as td:
+            filepath = os.path.join(td, "DECISIONS.md")
+            with open(filepath, "w") as f:
+                f.write("[D-20260213-001]\nStatus: active\n<!-- START -->\nold content\n<!-- END -->\nTags: test\n")
+            ok, msg = _op_replace_range(filepath, {
+                "target": "D-20260213-001",
+                "range": {"start": "<!-- START -->", "end": "<!-- END -->"},
+                "patch": "<!-- START -->\nnew content",
+            })
+            self.assertTrue(ok, msg)
+            with open(filepath) as f:
+                content = f.read()
+            self.assertIn("new content", content)
+            self.assertIn("<!-- END -->", content)
+            self.assertNotIn("old content", content)
+
+    def test_rejects_missing_markers(self):
+        with tempfile.TemporaryDirectory() as td:
+            filepath = os.path.join(td, "DECISIONS.md")
+            with open(filepath, "w") as f:
+                f.write("[D-20260213-001]\nStatus: active\n")
+            ok, msg = _op_replace_range(filepath, {
+                "target": "D-20260213-001",
+                "range": {"start": "<!-- NONEXISTENT -->", "end": "<!-- END -->"},
+                "patch": "new",
+            })
+            self.assertFalse(ok)
+            self.assertIn("markers not found", msg)
 
 
 if __name__ == "__main__":
