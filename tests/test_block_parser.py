@@ -154,6 +154,59 @@ class TestConstraintSignatureSingularPlural(unittest.TestCase):
         self.assertEqual(sigs[0]["id"], "CS-auth-method")
 
 
+class TestParserEdgeCases(unittest.TestCase):
+    """Parser hardening — edge cases and error recovery."""
+
+    def test_empty_string(self):
+        blocks = parse_blocks("")
+        self.assertEqual(blocks, [])
+
+    def test_no_blocks_just_text(self):
+        blocks = parse_blocks("This is just regular text\nwith no blocks.\n")
+        self.assertEqual(blocks, [])
+
+    def test_block_with_only_id(self):
+        blocks = parse_blocks("[D-20260215-001]\n")
+        self.assertEqual(len(blocks), 1)
+        self.assertEqual(blocks[0]["_id"], "D-20260215-001")
+
+    def test_unicode_content(self):
+        text = "[D-20260215-001]\nStatement: Использовать UTF-8 кодировку\nStatus: active\n"
+        blocks = parse_blocks(text)
+        self.assertEqual(len(blocks), 1)
+        self.assertIn("UTF-8", blocks[0]["Statement"])
+
+    def test_very_long_field_value(self):
+        long_val = "x" * 5000
+        text = f"[D-20260215-001]\nStatement: {long_val}\nStatus: active\n"
+        blocks = parse_blocks(text)
+        self.assertEqual(len(blocks), 1)
+        self.assertEqual(len(blocks[0]["Statement"]), 5000)
+
+    def test_consecutive_separators(self):
+        text = "[D-20260215-001]\nStatement: First\n---\n---\n---\n[D-20260215-002]\nStatement: Second\n"
+        blocks = parse_blocks(text)
+        self.assertEqual(len(blocks), 2)
+
+    def test_block_after_separator_no_blank(self):
+        text = "[D-20260215-001]\nStatement: First\n---\n[D-20260215-002]\nStatement: Second\n"
+        blocks = parse_blocks(text)
+        self.assertEqual(len(blocks), 2)
+
+    def test_multiline_continuation(self):
+        text = "[D-20260215-001]\nStatement: First line\n  continuation of statement\nStatus: active\n"
+        blocks = parse_blocks(text)
+        self.assertEqual(len(blocks), 1)
+        self.assertIn("continuation", blocks[0]["Statement"])
+
+    def test_list_field_with_many_items(self):
+        items = "\n".join(f"- Item {i}" for i in range(50))
+        text = f"[T-20260215-001]\nTitle: List test\nHistory:\n{items}\n"
+        blocks = parse_blocks(text)
+        self.assertEqual(len(blocks), 1)
+        self.assertEqual(len(blocks[0]["History"]), 50)
+
+
 class TestExtractRefs(unittest.TestCase):
     def test_finds_refs(self):
         blocks = [

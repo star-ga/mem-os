@@ -29,7 +29,7 @@ class TestTokenize(unittest.TestCase):
         self.assertNotIn("is", tokens)
         self.assertNotIn("for", tokens)
         self.assertIn("database", tokens)
-        self.assertIn("queries", tokens)
+        self.assertIn("query", tokens)  # stemmer reduces "queries" -> "query"
 
     def test_single_char_filtered(self):
         tokens = tokenize("a b c database")
@@ -259,6 +259,77 @@ class TestGraphRecall(unittest.TestCase):
             results = recall(ws, "PostgreSQL", graph_boost=True)
             graph_results = [r for r in results if r.get("via_graph")]
             self.assertGreater(len(graph_results), 0)
+
+
+class TestStemmer(unittest.TestCase):
+    """Tests for the simplified Porter stemmer."""
+
+    def setUp(self):
+        from recall import _stem
+        self.stem = _stem
+
+    def test_ing_suffix(self):
+        self.assertEqual(self.stem("running"), "runn")
+        self.assertEqual(self.stem("testing"), "test")
+
+    def test_ed_suffix(self):
+        self.assertEqual(self.stem("decided"), "decid")
+        # "used" is only 4 chars — below len>4 threshold for -ed rule
+        self.assertEqual(self.stem("used"), "used")
+
+    def test_tion_suffix(self):
+        # -tion rule: strip "tion", add "t" → "authenticat"
+        self.assertEqual(self.stem("authentication"), "authenticat")
+
+    def test_ies_suffix(self):
+        self.assertEqual(self.stem("queries"), "query")
+        self.assertEqual(self.stem("entries"), "entry")
+
+    def test_ly_suffix(self):
+        self.assertEqual(self.stem("quickly"), "quick")
+
+    def test_ment_suffix(self):
+        self.assertEqual(self.stem("deployment"), "deploy")
+
+    def test_short_words_unchanged(self):
+        self.assertEqual(self.stem("go"), "go")
+        self.assertEqual(self.stem("db"), "db")
+        self.assertEqual(self.stem("api"), "api")
+
+    def test_already_stemmed(self):
+        # Words that don't match any suffix rule
+        self.assertEqual(self.stem("auth"), "auth")
+        self.assertEqual(self.stem("jwt"), "jwt")
+
+
+class TestExpandQuery(unittest.TestCase):
+    """Tests for domain-aware query expansion."""
+
+    def setUp(self):
+        from recall import expand_query
+        self.expand = expand_query
+
+    def test_auth_expands(self):
+        expanded = self.expand(["auth"])
+        self.assertIn("auth", expanded)
+        self.assertGreater(len(expanded), 1)
+
+    def test_db_expands(self):
+        expanded = self.expand(["db"])
+        self.assertIn("db", expanded)
+        self.assertGreater(len(expanded), 1)
+
+    def test_unknown_doesnt_expand(self):
+        expanded = self.expand(["xyzfoo"])
+        self.assertEqual(expanded, ["xyzfoo"])
+
+    def test_max_expansions_respected(self):
+        expanded = self.expand(["auth"], max_expansions=1)
+        self.assertLessEqual(len(expanded), 2)  # original + 1
+
+    def test_no_duplicates(self):
+        expanded = self.expand(["auth", "authentication"])
+        self.assertEqual(len(expanded), len(set(expanded)))
 
 
 if __name__ == "__main__":

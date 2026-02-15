@@ -23,6 +23,7 @@ from datetime import datetime, timedelta
 # Import block parser from same directory
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from block_parser import parse_file, get_active, extract_refs
+from filelock import FileLock
 
 
 # ═══════════════════════════════════════════════
@@ -122,13 +123,17 @@ def load_intel_state(ws):
 
 
 def save_intel_state(ws, state):
-    """Save intel-state.json atomically (write to temp, then rename)."""
+    """Save intel-state.json atomically (write to temp, then rename).
+
+    Uses file locking to prevent concurrent scanner writes.
+    """
     path = f"{ws}/memory/intel-state.json"
     tmp_path = path + ".tmp"
-    with open(tmp_path, "w") as f:
-        json.dump(state, f, indent=2, default=str)
-        f.write("\n")
-    os.replace(tmp_path, path)
+    with FileLock(path):
+        with open(tmp_path, "w") as f:
+            json.dump(state, f, indent=2, default=str)
+            f.write("\n")
+        os.replace(tmp_path, path)
 
 
 # ═══════════════════════════════════════════════
@@ -836,9 +841,10 @@ Sources:
         new_blocks.append(block)
 
     if new_blocks:
-        with open(path, "a") as f:
-            for block in new_blocks:
-                f.write(block + "\n")
+        with FileLock(path):
+            with open(path, "a") as f:
+                for block in new_blocks:
+                    f.write(block + "\n")
         report.info_msg(f"Wrote {len(new_blocks)} new contradiction(s) to CONTRADICTIONS.md")
 
 
@@ -885,9 +891,10 @@ Sources:
         new_blocks.append(block)
 
     if new_blocks:
-        with open(path, "a") as f:
-            for block in new_blocks:
-                f.write(block + "\n")
+        with FileLock(path):
+            with open(path, "a") as f:
+                for block in new_blocks:
+                    f.write(block + "\n")
         report.info_msg(f"Wrote {len(new_blocks)} new drift signal(s) to DRIFT.md")
 
 

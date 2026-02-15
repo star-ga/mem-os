@@ -81,20 +81,29 @@ Continuous integrity checking: contradictions, drift, dead decisions, orphan tas
 ### Safe Self-Correction
 All changes flow through graduated modes: `detect_only` → `propose` → `enforce`. Apply engine with snapshot, receipt, DIFF, and automatic rollback on validation failure.
 
-### Lexical Recall
-Field-weighted TF-IDF search across all memory. Zero dependencies. Fast and deterministic.
+### BM25 Hybrid Recall
+BM25 scoring with Porter stemming, domain-aware query expansion, field boosts, recency weighting, and optional graph-based cross-reference neighbor boosting. Zero dependencies. Fast and deterministic.
 
 ### Graph-Based Recall
 Cross-reference neighbor boosting — when a keyword match is found, blocks that reference or are referenced by the match get boosted. Surfaces related decisions, tasks, and entities that share no keywords but are structurally connected. Zero dependencies.
 
 ### Vector Recall (optional)
-Pluggable embedding backend — local (Qdrant + Ollama) or cloud (Pinecone). Falls back to TF-IDF when unavailable.
+Pluggable embedding backend — local (Qdrant + Ollama) or cloud (Pinecone). Falls back to BM25 when unavailable.
 
-### Auto-Capture (safe)
-Session-end hook detects decision-like language and writes to `SIGNALS.md` only. Never touches source of truth directly. All signals go through `/apply`.
+### Auto-Capture with Structured Extraction
+Session-end hook detects decision/task language (26 patterns with confidence classification), extracts structured metadata (subject, object, tags), and writes to `SIGNALS.md` only. Never touches source of truth directly. All signals go through `/apply`. Supports batch scanning of recent logs.
 
-### 74+ Structural Checks + 134 Unit Tests
-`validate.sh` checks schemas, cross-references, ID formats, status values, supersede chains, ConstraintSignatures, and more. Backed by 134 pytest unit tests covering parser, recall, capture, apply, and intel_scan.
+### Concurrency Safety
+Cross-platform advisory file locking (`fcntl`/`msvcrt`/atomic create) protects all concurrent write paths. Stale lock detection with PID-based cleanup. Zero dependencies.
+
+### Compaction & GC
+Automated workspace maintenance: archive completed blocks, clean up old snapshots, compact resolved signals, archive daily logs into yearly files. Configurable thresholds with dry-run mode.
+
+### Observability
+Structured JSON logging (via stdlib), in-process metrics counters, and timing context managers. All scripts emit machine-parseable events. Controlled via `MEM_OS_LOG_LEVEL` env var.
+
+### 74+ Structural Checks + 199 Unit Tests
+`validate.sh` checks schemas, cross-references, ID formats, status values, supersede chains, ConstraintSignatures, and more. Backed by 199 pytest unit tests covering parser, recall (BM25 + stemming + expansion), capture (structured extraction + confidence), compaction, file locking, observability, apply, and intel_scan.
 
 ### Audit Trail
 Every applied proposal logged with timestamp, receipt, and DIFF. Full traceability from signal → proposal → decision.
@@ -225,7 +234,7 @@ $ bash maintenance/validate.sh .
 TOTAL: 74 checks | 74 passed | 0 issues | 1 warnings
 ```
 
-> Note: validate.sh check count scales with data — fresh workspaces have 74 checks, populated workspaces have more. The 1 warning is expected (no weekly summaries yet). Additionally, 134 pytest unit tests cover all core modules.
+> Note: validate.sh check count scales with data — fresh workspaces have 74 checks, populated workspaces have more. The 1 warning is expected (no weekly summaries yet). Additionally, 199 pytest unit tests cover all core modules.
 
 ---
 
@@ -283,9 +292,12 @@ your-workspace/
 └── maintenance/
     ├── intel_scan.py         # Integrity scanner
     ├── apply_engine.py       # Proposal apply engine
-    ├── block_parser.py       # Markdown block parser
-    ├── recall.py             # Recall engine (TF-IDF + graph)
-    ├── capture.py            # Auto-capture engine
+    ├── block_parser.py       # Markdown block parser (typed)
+    ├── recall.py             # Recall engine (BM25 + stemming + graph)
+    ├── capture.py            # Auto-capture (26 patterns + structured extraction)
+    ├── compaction.py          # Compaction/GC/archival engine
+    ├── filelock.py           # Cross-platform advisory file locking
+    ├── observability.py      # Structured JSON logging + metrics
     ├── validate.sh           # Structural validator (bash, 74+ checks)
     └── validate_py.py        # Structural validator (Python, cross-platform)
 ```
@@ -302,9 +314,9 @@ Compared against every major memory solution for AI agents (as of 2026):
 |---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
 | **Recall & Search** | | | | | | | | | |
 | Semantic recall (vector) | Cloud | Cloud | ChromaDB | Yes | Yes | Yes | Yes | Yes | **Optional (local/cloud)** |
-| Lexical recall (keyword) | Filter | No | No | No | No | No | No | No | **TF-IDF with field boosts** |
+| Lexical recall (keyword) | Filter | No | No | No | No | No | No | No | **BM25 with stemming + expansion** |
 | Graph-based recall | Yes | No | No | No | Yes | No | Yes | Yes | **Yes (xref neighbor boost)** |
-| Hybrid search | Partial | No | No | No | Yes | No | Yes | Yes | **TF-IDF + optional vector** |
+| Hybrid search | Partial | No | No | No | Yes | No | Yes | Yes | **BM25 + graph + optional vector** |
 | **Memory Persistence** | | | | | | | | | |
 | Structured memory | JSON | JSON | SQLite | Memory blocks | Graph | KV store | Graph | Graph | **Markdown blocks** |
 | Entity tracking | Yes | Yes | No | Yes | Yes | Yes | Yes | Yes | **Yes (people/projects/tools)** |
@@ -314,7 +326,7 @@ Compared against every major memory solution for AI agents (as of 2026):
 | **Integrity & Safety** | | | | | | | | | |
 | Contradiction detection | No | No | No | No | No | No | No | No | **Yes (ConstraintSignatures)** |
 | Drift analysis | No | No | No | No | No | No | No | No | **Yes (dead decisions, orphans)** |
-| Structural validation | No | No | No | No | No | No | No | No | **74+ checks + 134 tests** |
+| Structural validation | No | No | No | No | No | No | No | No | **74+ checks + 199 tests** |
 | Impact graph | No | No | No | No | No | No | No | No | **Yes (decision → task/entity)** |
 | Coverage scoring | No | No | No | No | No | No | No | No | **Yes (% decisions enforced)** |
 | Provenance gate | No | No | No | No | Partial | No | No | No | **Yes (no source = no claim)** |
@@ -343,7 +355,7 @@ Compared against every major memory solution for AI agents (as of 2026):
 | **LangMem** | Native LangChain/LangGraph integration | Tied to LangChain ecosystem |
 | **Cognee** | Advanced chunking, web content bridging | Research-oriented, complex setup |
 | **Graphlit** | Multimodal ingestion, semantic search, managed platform | Cloud-only, managed service |
-| **Mem OS** | Integrity + self-correction + zero deps + local-first | Lexical + graph recall by default (vector optional) |
+| **Mem OS** | Integrity + self-correction + zero deps + local-first | BM25 + graph recall by default (vector optional) |
 
 ### The Gap Mem OS Fills
 
@@ -361,7 +373,7 @@ Every tool above does **storage + retrieval**. None of them answer:
 
 ## Recall
 
-### Default: Lexical (TF-IDF)
+### Default: BM25 Hybrid
 
 ```bash
 python3 maintenance/recall.py --query "authentication" --workspace .
@@ -369,7 +381,11 @@ python3 maintenance/recall.py --query "auth" --json --limit 5 --workspace .
 python3 maintenance/recall.py --query "deadline" --active-only --workspace .
 ```
 
-Field-weighted TF-IDF with boosts for recency, active status, and priority. Searches across all structured files. Zero dependencies.
+BM25 scoring (k1=1.2, b=0.75) with Porter stemming, domain-aware query expansion, field boosts for recency, active status, and priority. Searches across all structured files. Zero dependencies.
+
+**Query expansion:** Searching "auth" automatically expands to include "authentication", "login", "oauth", "jwt", "session". Domain-aware synonyms cover auth, database, API, deployment, testing, security, performance, and infrastructure terms.
+
+**Stemming:** "queries" matches "query", "deployed" matches "deployment", "authenticating" matches "authentication". Simplified Porter stemmer with zero dependencies.
 
 ### Graph-Based (cross-reference neighbor boost)
 
@@ -377,7 +393,7 @@ Field-weighted TF-IDF with boosts for recency, active status, and priority. Sear
 python3 maintenance/recall.py --query "database" --graph --workspace .
 ```
 
-Adds graph traversal to TF-IDF: when a block matches your query, its 1-hop cross-reference neighbors also appear in results (tagged `[graph]`). This surfaces related blocks that share no keywords but are structurally connected via `AlignsWith`, `Dependencies`, `Supersedes`, `Sources`, ConstraintSignature scopes, and any other block ID mention.
+Adds graph traversal to BM25: when a block matches your query, its 1-hop cross-reference neighbors also appear in results (tagged `[graph]`). This surfaces related blocks that share no keywords but are structurally connected via `AlignsWith`, `Dependencies`, `Supersedes`, `Sources`, ConstraintSignature scopes, and any other block ID mention.
 
 ### Optional: Vector (pluggable)
 
@@ -396,7 +412,7 @@ Set in `mem-os.json`:
 }
 ```
 
-Implement `RecallBackend` interface in `maintenance/recall_vector.py`. Falls back to TF-IDF automatically if vector backend is unavailable.
+Implement `RecallBackend` interface in `maintenance/recall_vector.py`. Falls back to BM25 automatically if vector backend is unavailable.
 
 ---
 
@@ -405,9 +421,13 @@ Implement `RecallBackend` interface in `maintenance/recall_vector.py`. Falls bac
 ```
 Session end
     ↓
-capture.py scans daily log
+capture.py scans daily log (or --scan-all for batch)
     ↓
-Detects decision-like language (16 patterns)
+Detects decision/task language (26 patterns, 3 confidence levels)
+    ↓
+Extracts structured metadata (subject, object, tags)
+    ↓
+Classifies confidence (high/medium/low → P1/P2/P3)
     ↓
 Writes to intelligence/SIGNALS.md ONLY
     ↓
@@ -415,6 +435,8 @@ User reviews signals
     ↓
 /apply promotes to DECISIONS.md or TASKS.md
 ```
+
+**Batch scanning:** `python3 maintenance/capture.py . --scan-all` scans the last 7 days of daily logs at once.
 
 **Safety guarantee:** `capture.py` never writes to `decisions/` or `tasks/` directly. All signals must go through the apply engine to become formal blocks.
 
@@ -492,12 +514,18 @@ All settings in `mem-os.json` (created by `init_workspace.py`):
   "auto_recall": true,
   "self_correcting_mode": "detect_only",
   "recall": {
-    "backend": "tfidf"
+    "backend": "bm25"
   },
   "proposal_budget": {
     "per_run": 3,
     "per_day": 6,
     "backlog_limit": 30
+  },
+  "compaction": {
+    "archive_days": 90,
+    "snapshot_days": 30,
+    "log_days": 180,
+    "signal_days": 60
   },
   "scan_schedule": "daily"
 }
@@ -509,13 +537,17 @@ All settings in `mem-os.json` (created by `init_workspace.py`):
 | `auto_capture` | `true` | Run capture engine on session end |
 | `auto_recall` | `true` | Show recall context on session start |
 | `self_correcting_mode` | `"detect_only"` | Governance mode |
-| `recall.backend` | `"tfidf"` | `"tfidf"` or `"vector"` |
+| `recall.backend` | `"bm25"` | `"bm25"` or `"vector"` |
 | `recall.vector.provider` | — | Vector backend: `"qdrant"` or `"pinecone"` (optional) |
 | `recall.vector.model` | — | Embedding model name (optional) |
 | `recall.vector.url` | — | Vector DB endpoint (optional) |
 | `proposal_budget.per_run` | `3` | Max proposals generated per scan |
 | `proposal_budget.per_day` | `6` | Max proposals per day |
 | `proposal_budget.backlog_limit` | `30` | Max pending proposals before pausing generation |
+| `compaction.archive_days` | `90` | Archive completed blocks older than N days |
+| `compaction.snapshot_days` | `30` | Remove apply snapshots older than N days |
+| `compaction.log_days` | `180` | Archive daily logs older than N days into yearly files |
+| `compaction.signal_days` | `60` | Remove resolved/rejected signals older than N days |
 | `scan_schedule` | `"daily"` | `"daily"` or `"manual"` |
 
 ---

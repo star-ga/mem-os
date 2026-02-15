@@ -15,13 +15,15 @@ As library:
     active = [b for b in blocks if b.get("Status") == "active"]
 """
 
+from __future__ import annotations
+
 import re
 import json
 import sys
 import os
 
 
-def parse_blocks(text):
+def parse_blocks(text: str) -> list[dict]:
     """Parse all [ID] blocks from text. Returns list of dicts.
 
     Each dict has:
@@ -427,18 +429,18 @@ def _coerce_value(s):
     return s
 
 
-def parse_file(filepath):
+def parse_file(filepath: str) -> list[dict]:
     """Parse blocks from a file path."""
     with open(filepath, "r", encoding="utf-8") as f:
         return parse_blocks(f.read())
 
 
-def get_active(blocks, status_field="Status", active_value="active"):
+def get_active(blocks: list[dict], status_field: str = "Status", active_value: str = "active") -> list[dict]:
     """Filter blocks to only active ones."""
     return [b for b in blocks if b.get(status_field) == active_value]
 
 
-def get_by_id(blocks, block_id):
+def get_by_id(blocks: list[dict], block_id: str) -> dict | None:
     """Find a block by its _id."""
     for b in blocks:
         if b.get("_id") == block_id:
@@ -446,7 +448,7 @@ def get_by_id(blocks, block_id):
     return None
 
 
-def extract_refs(blocks):
+def extract_refs(blocks: list[dict]) -> set[str]:
     """Extract all cross-reference IDs from block fields."""
     refs = set()
     pattern = re.compile(

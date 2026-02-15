@@ -9,6 +9,8 @@ Usage:
     python3 scripts/init_workspace.py /path/to/workspace
 """
 
+from __future__ import annotations
+
 import json
 import os
 import shutil
@@ -63,6 +65,9 @@ MAINTENANCE_SCRIPTS = [
     "capture.py",
     "validate.sh",
     "validate_py.py",
+    "filelock.py",
+    "compaction.py",
+    "observability.py",
 ]
 
 DEFAULT_CONFIG = {
@@ -83,7 +88,7 @@ DEFAULT_CONFIG = {
 }
 
 
-def init(ws):
+def init(ws: str) -> tuple[list[str], list[str]]:
     """Initialize a mem-os workspace."""
     ws = os.path.abspath(ws)
 
