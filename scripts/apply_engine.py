@@ -990,7 +990,7 @@ def rollback(ws, receipt_ts):
     if os.path.isfile(receipt_path):
         with open(receipt_path, "a") as f:
             f.write(f"\nRolledBack: {datetime.now().strftime('%Y-%m-%dT%H:%M:%SZ')}\n")
-            f.write(f"FinalStatus: rolled_back\n")
+            f.write(f"Result: rolled_back\n")
 
     print(f"\n═══ ROLLED BACK from {receipt_ts} ═══")
     return True

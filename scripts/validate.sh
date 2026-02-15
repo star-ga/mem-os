@@ -322,6 +322,9 @@ for idcheck in \
   [[ -f "$WS/$idfile" ]] || continue
   total_ids=$(grep -oE "^\[$idpat\]$" "$WS/$idfile" 2>/dev/null | wc -l || echo 0)
   unique_ids=$(grep -oE "^\[$idpat\]$" "$WS/$idfile" 2>/dev/null | sort -u | wc -l || echo 0)
+  # Sanitize to integer
+  total_ids=$(echo "$total_ids" | tr -d '[:space:]')
+  unique_ids=$(echo "$unique_ids" | tr -d '[:space:]')
   if [[ "$total_ids" -gt "$unique_ids" ]]; then
     fail "S1: Duplicate BlockIDs in $idfile ($total_ids total, $unique_ids unique)"
   elif [[ "$total_ids" -gt 0 ]]; then
@@ -409,7 +412,7 @@ section "9. v2.0 CHECKS (warnings only)"
 if [[ -f "$DEC_FILE" ]]; then
   # Get IDs of active decisions with relevant tags
   needs_sig=$(MEM_OS_WS="$WS" MEM_OS_DECFILE="$DEC_FILE" python3 -c "
-import os, sys; sys.path.insert(0, os.path.join(os.environ['MEM_OS_WS'], 'maintenance'))
+import os, sys; sys.path.insert(0, os.path.join(os.environ['MEM_OS_WS'], 'scripts'))
 from block_parser import parse_file
 blocks = parse_file(os.environ['MEM_OS_DECFILE'])
 required_tags = {'integrity','security','memory','retrieval'}
@@ -434,7 +437,7 @@ fi
 # V2.2: ConstraintSignatures have required fields
 if [[ -f "$DEC_FILE" ]]; then
   sig_issues=$(MEM_OS_WS="$WS" MEM_OS_DECFILE="$DEC_FILE" python3 -c "
-import os, sys; sys.path.insert(0, os.path.join(os.environ['MEM_OS_WS'], 'maintenance'))
+import os, sys; sys.path.insert(0, os.path.join(os.environ['MEM_OS_WS'], 'scripts'))
 from block_parser import parse_file
 blocks = parse_file(os.environ['MEM_OS_DECFILE'])
 required = ['id','domain','subject','predicate','object','modality','priority','scope','evidence']
@@ -457,7 +460,7 @@ fi
 # V2.3: domain and modality in valid enums, priority in 1-10
 if [[ -f "$DEC_FILE" ]]; then
   enum_issues=$(MEM_OS_WS="$WS" MEM_OS_DECFILE="$DEC_FILE" python3 -c "
-import os, sys; sys.path.insert(0, os.path.join(os.environ['MEM_OS_WS'], 'maintenance'))
+import os, sys; sys.path.insert(0, os.path.join(os.environ['MEM_OS_WS'], 'scripts'))
 from block_parser import parse_file
 blocks = parse_file(os.environ['MEM_OS_DECFILE'])
 valid_domains = {'integrity','memory','retrieval','security','llm_strategy','workflow','project','comms','finance','other'}
@@ -488,7 +491,7 @@ fi
 # V2.4: AlignsWith field present on active tasks
 if [[ -f "$TASK_FILE" ]]; then
   align_issues=$(MEM_OS_WS="$WS" MEM_OS_TASKFILE="$TASK_FILE" python3 -c "
-import os, sys; sys.path.insert(0, os.path.join(os.environ['MEM_OS_WS'], 'maintenance'))
+import os, sys; sys.path.insert(0, os.path.join(os.environ['MEM_OS_WS'], 'scripts'))
 from block_parser import parse_file
 blocks = parse_file(os.environ['MEM_OS_TASKFILE'])
 for b in blocks:
@@ -526,7 +529,7 @@ fi
 # V2.6: v1.1 signature fields: axis.key, relation, enforcement present
 if [[ -f "$DEC_FILE" ]]; then
   v11_issues=$(MEM_OS_WS="$WS" MEM_OS_DECFILE="$DEC_FILE" python3 -c "
-import os, sys; sys.path.insert(0, os.path.join(os.environ['MEM_OS_WS'], 'maintenance'))
+import os, sys; sys.path.insert(0, os.path.join(os.environ['MEM_OS_WS'], 'scripts'))
 from block_parser import parse_file
 blocks = parse_file(os.environ['MEM_OS_DECFILE'])
 valid_relations = {'standalone','requires','implies','composes_with','overrides','equivalent'}
@@ -557,7 +560,7 @@ fi
 # V2.7: lifecycle.created_by present on all signatures
 if [[ -f "$DEC_FILE" ]]; then
   lc_issues=$(MEM_OS_WS="$WS" MEM_OS_DECFILE="$DEC_FILE" python3 -c "
-import os, sys; sys.path.insert(0, os.path.join(os.environ['MEM_OS_WS'], 'maintenance'))
+import os, sys; sys.path.insert(0, os.path.join(os.environ['MEM_OS_WS'], 'scripts'))
 from block_parser import parse_file
 blocks = parse_file(os.environ['MEM_OS_DECFILE'])
 for b in blocks:
@@ -585,6 +588,9 @@ if [[ -d "$WS/intelligence/proposed" ]]; then
     [[ -f "$pfile" ]] || continue
     staged_count=$(grep -c "^Status: staged" "$pfile" 2>/dev/null || echo 0)
     fp_count=$(grep -c "^Fingerprint: " "$pfile" 2>/dev/null || echo 0)
+    # Sanitize to integer
+    staged_count=$(echo "$staged_count" | tr -d '[:space:]')
+    fp_count=$(echo "$fp_count" | tr -d '[:space:]')
     if [[ "$staged_count" -gt 0 && "$fp_count" -lt "$staged_count" ]]; then
       warn "V2.9: $(basename "$pfile") has staged proposals missing Fingerprint field"
     elif [[ "$staged_count" -gt 0 ]]; then

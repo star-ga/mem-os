@@ -264,10 +264,14 @@ def check_signature_conflict(sig1, sig2):
 
     conflict_level = MODALITY_CONFLICTS.get((m1, m2))
     if conflict_level:
-        return {
-            "severity": conflict_level,
-            "reason": f"modality conflict: {m1} vs {m2} on axis={ax1}",
-        }
+        # Only flag modality conflicts when objects overlap or are unspecified
+        obj1 = sig1.get("object", "")
+        obj2 = sig2.get("object", "")
+        if not obj1 or not obj2 or obj1 == obj2:
+            return {
+                "severity": conflict_level,
+                "reason": f"modality conflict: {m1} vs {m2} on axis={ax1}",
+            }
 
     # ── Competing requirements: same modality, same predicate, different objects ──
     shared_predicate = sig1.get("predicate") == sig2.get("predicate")
@@ -983,11 +987,17 @@ def generate_proposals(contradictions, drift_signals, ws, intel_state, report):
         sig2 = c["sig2"]["sig"]
         p1 = int(sig1.get("priority", 5))
         p2 = int(sig2.get("priority", 5))
-        # Propose superseding the lower-priority decision
-        if p1 >= p2:
+        # Propose superseding the lower-priority decision (skip invariants)
+        e1 = sig1.get("enforcement", "")
+        e2 = sig2.get("enforcement", "")
+        if e1 == "invariant" and e2 == "invariant":
+            continue  # Cannot supersede either invariant
+        if p1 >= p2 and e2 != "invariant":
             target_dec = c["sig2"]["decision"]
-        else:
+        elif e1 != "invariant":
             target_dec = c["sig1"]["decision"]
+        else:
+            continue  # Both candidates are invariants
 
         pid = f"P-{proposal_date}-{len(proposals)+1:03d}"
         proposals.append({
