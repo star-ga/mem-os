@@ -692,7 +692,7 @@ All settings in `mem-os.json` (created by `init_workspace.py`):
 
 ## MCP Server
 
-Mem-OS ships with a [Model Context Protocol](https://modelcontextprotocol.io/) server that exposes memory as resources and tools to any MCP-compatible client.
+Mem-OS ships with a [Model Context Protocol](https://modelcontextprotocol.io/) server that exposes memory as resources and tools to any MCP-compatible client. For a step-by-step walkthrough, see the [Claude Desktop Setup Guide](docs/claude-desktop-setup.md).
 
 ### Install
 
