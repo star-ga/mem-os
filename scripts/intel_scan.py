@@ -1079,6 +1079,7 @@ def generate_proposals(contradictions, drift_signals, ws, intel_state, report):
                     existing = f.read()
 
             new_blocks = []
+            batch_fingerprints = set()
             for p in file_proposals:
                 ops_lines = "\n".join(
                     f"- op: {op['op']}\n  file: {op['file']}\n  target: {op.get('target', '')}"
@@ -1111,9 +1112,10 @@ def generate_proposals(contradictions, drift_signals, ws, intel_state, report):
                     f"Sources:\n"
                     f"- maintenance/intel-report.txt\n"
                 )
-                # Skip if same fingerprint already exists in proposed file
-                if f"Fingerprint: {fp}" in existing:
+                # Skip if same fingerprint already exists in proposed file or current batch
+                if f"Fingerprint: {fp}" in existing or fp in batch_fingerprints:
                     continue
+                batch_fingerprints.add(fp)
                 new_blocks.append(block)
 
             if new_blocks:
