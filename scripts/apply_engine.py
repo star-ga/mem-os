@@ -315,8 +315,8 @@ def write_receipt(snap_dir, proposal, ts, pre_checks, status="in_progress"):
     return receipt_path
 
 
-def update_receipt(receipt_path, post_checks, delta, status):
-    """Update receipt with post-check results."""
+def update_receipt(receipt_path, post_checks, delta, status, diff_text=None):
+    """Update receipt with post-check results and diff."""
     with open(receipt_path, "a") as fh:
         fh.write("PostChecks:\n")
         for c in post_checks:
@@ -324,8 +324,14 @@ def update_receipt(receipt_path, post_checks, delta, status):
         fh.write("Delta:\n")
         for k, v in delta.items():
             fh.write(f"- {k}: {v}\n")
-        # Replace Status line — simpler to just append
-        fh.write(f"FinalStatus: {status}\n")
+        
+        if diff_text:
+            fh.write("DIFF:\n")
+            # Indent diff lines for block inclusion
+            for line in diff_text.split("\n"):
+                fh.write(f"  {line}\n")
+        
+        fh.write(f"Result: {status}\n")
 
 
 def _get_mode(ws="."):
@@ -729,8 +735,8 @@ def update_last_apply_ts(ws):
     _save_intel_state(ws, state)
 
 
-def generate_diff_artifact(ws, snap_dir, files_touched):
-    """Generate DIFF.txt showing what changed during apply."""
+def generate_diff_text(ws, snap_dir, files_touched):
+    """Generate unified diff showing what changed during apply."""
     diff_lines = []
     for rel_path in files_touched:
         old_path = os.path.join(snap_dir, rel_path)
@@ -754,13 +760,9 @@ def generate_diff_artifact(ws, snap_dir, files_touched):
         if diff_text:
             diff_lines.append(diff_text)
 
-    diff_path = os.path.join(snap_dir, "DIFF.txt")
-    with open(diff_path, "w") as f:
-        if diff_lines:
-            f.write("\n\n".join(diff_lines))
-        else:
-            f.write("(no differences detected)\n")
-    return diff_path
+    if not diff_lines:
+        return "(no differences detected)"
+    return "\n\n".join(diff_lines)
 
 
 def _load_intel_state(ws):
@@ -917,16 +919,15 @@ def apply_proposal(ws, proposal_id, dry_run=False):
         _mark_proposal_status(source_file, proposal_id, "rolled_back")
         return False, "Post-checks failed, rolled back"
 
-    # 7. Generate DIFF.txt
+    # 7. Generate DIFF text
     files_touched = proposal.get("FilesTouched", [])
     if not files_touched:
         # Derive from Ops when FilesTouched is absent
         files_touched = list({op.get("file", "") for op in proposal.get("Ops", []) if op.get("file")})
-    diff_path = generate_diff_artifact(ws, snap_dir, files_touched)
-    print(f"  Diff artifact: {diff_path}")
+    diff_text = generate_diff_text(ws, snap_dir, files_touched)
 
     # 8. Commit receipt + mark proposal as applied + update last_apply_ts
-    update_receipt(receipt_path, post_report, delta, "applied")
+    update_receipt(receipt_path, post_report, delta, "applied", diff_text)
     _mark_proposal_status(source_file, proposal_id, "applied")
     update_last_apply_ts(ws)
     print(f"\n═══ APPLIED: {proposal_id} ═══")

@@ -320,8 +320,8 @@ for idcheck in \
   "entities/tools.md:TOOL-[a-z0-9-]+"; do
   IFS=':' read -r idfile idpat <<< "$idcheck"
   [[ -f "$WS/$idfile" ]] || continue
-  total_ids=$(grep -coE "^\[$idpat\]$" "$WS/$idfile" 2>/dev/null || echo 0)
-  unique_ids=$(grep -hoE "^\[$idpat\]$" "$WS/$idfile" 2>/dev/null | sort -u | wc -l || echo 0)
+  total_ids=$(grep -oE "^\[$idpat\]$" "$WS/$idfile" 2>/dev/null | wc -l || echo 0)
+  unique_ids=$(grep -oE "^\[$idpat\]$" "$WS/$idfile" 2>/dev/null | sort -u | wc -l || echo 0)
   if [[ "$total_ids" -gt "$unique_ids" ]]; then
     fail "S1: Duplicate BlockIDs in $idfile ($total_ids total, $unique_ids unique)"
   elif [[ "$total_ids" -gt 0 ]]; then
