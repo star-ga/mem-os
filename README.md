@@ -73,6 +73,30 @@ Mem OS also **detects when your memory is wrong** — contradictions between dec
 
 ## Features
 
+### Benchmark Results
+
+Mem-OS recall engine evaluated on two standard long-term memory benchmarks. Zero dependencies, pure BM25 + Porter stemming + domain-aware query expansion.
+
+**LongMemEval (ICLR 2025, 470 questions):**
+
+| Category | N | R@1 | R@5 | R@10 | MRR |
+|---|---|---|---|---|---|
+| **Overall** | **470** | **73.2%** | **85.3%** | **88.1%** | **0.784** |
+| Multi-session | 121 | 83.5% | 95.9% | 95.9% | 0.885 |
+| Temporal reasoning | 127 | 76.4% | 91.3% | 92.9% | 0.826 |
+| Knowledge update | 72 | 80.6% | 88.9% | 91.7% | 0.844 |
+| Single-session assistant | 56 | 82.1% | 89.3% | 89.3% | 0.847 |
+
+**LoCoMo (Snap Research, 1986 questions):**
+
+| Category | N | R@1 | R@5 | R@10 | MRR |
+|---|---|---|---|---|---|
+| **Overall** | **1986** | **35.7%** | **58.5%** | **66.9%** | **0.453** |
+| Multi-hop | 321 | 47.4% | 66.4% | 71.0% | 0.549 |
+| Open-domain | 841 | 38.4% | 62.1% | 70.0% | 0.484 |
+
+Run benchmarks yourself: `python3 benchmarks/locomo_harness.py` or `python3 benchmarks/longmemeval_harness.py`
+
 ### Persistent Memory
 Structured, validated, append-only decisions / tasks / entities / incidents with provenance and supersede chains.
 
