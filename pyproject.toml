@@ -31,6 +31,13 @@ Issues = "https://github.com/star-ga/mem-os/issues"
 requires = ["setuptools>=64"]
 build-backend = "setuptools.build_meta"
 
+[project.scripts]
+mem-os-init = "mem_os.init_workspace:main"
+mem-os-scan = "mem_os.intel_scan:main"
+mem-os-recall = "mem_os.recall:main"
+mem-os-capture = "mem_os.capture:main"
+mem-os-validate = "mem_os.validate_py:main"
+
 [tool.setuptools]
 packages = ["mem_os"]
 package-dir = {"mem_os" = "scripts"}
@@ -38,6 +45,7 @@ package-dir = {"mem_os" = "scripts"}
 [tool.setuptools.package-data]
 mem_os = ["*.sh"]
 
-# Note: mem-os is primarily a Claude Code plugin (installed via git clone).
-# Templates, hooks, and skills are located relative to the repo root.
-# For development: pip install -e .
+# Installation modes:
+# 1. Claude Code plugin (primary): git clone, no pip needed
+# 2. Standalone CLI: pip install -e . → provides mem-os-init, mem-os-scan, etc.
+# The mem_os package maps to scripts/ directory via package-dir.

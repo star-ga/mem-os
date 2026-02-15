@@ -2,7 +2,7 @@
 
 ## Available Commands
 - `/scan` — Run contradiction detection, drift analysis, impact graph, snapshot, briefing
-- `/validate` — Run structural integrity validation (74+ checks)
+- `/validate` — Run structural integrity validation (74+ structural checks, 134 unit tests)
 - `/apply <ProposalId>` — Apply a staged proposal with atomic rollback
 - `/recall <query>` — Search all memory files (TF-IDF + graph + optional vector)
 - `/status` — Health dashboard (contradictions, drift, coverage)

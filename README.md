@@ -93,8 +93,8 @@ Pluggable embedding backend — local (Qdrant + Ollama) or cloud (Pinecone). Fal
 ### Auto-Capture (safe)
 Session-end hook detects decision-like language and writes to `SIGNALS.md` only. Never touches source of truth directly. All signals go through `/apply`.
 
-### 74+ Structural Checks
-`validate.sh` checks schemas, cross-references, ID formats, status values, supersede chains, ConstraintSignatures, and more.
+### 74+ Structural Checks + 134 Unit Tests
+`validate.sh` checks schemas, cross-references, ID formats, status values, supersede chains, ConstraintSignatures, and more. Backed by 134 pytest unit tests covering parser, recall, capture, apply, and intel_scan.
 
 ### Audit Trail
 Every applied proposal logged with timestamp, receipt, and DIFF. Full traceability from signal → proposal → decision.
@@ -103,14 +103,16 @@ Every applied proposal logged with timestamp, receipt, and DIFF. Full traceabili
 
 ## Quick Start
 
+Get from zero to validated workspace in under 3 minutes.
+
 ### 1. Clone
 
 ```bash
-cd /path/to/your/openclaw/workspace
+cd /path/to/your/project
 git clone https://github.com/star-ga/mem-os.git .mem-os
 ```
 
-### 2. Initialize
+### 2. Initialize workspace
 
 ```bash
 python3 .mem-os/scripts/init_workspace.py .
@@ -118,31 +120,43 @@ python3 .mem-os/scripts/init_workspace.py .
 
 Creates 12 directories, 19 template files, and `mem-os.json` config. **Never overwrites existing files.**
 
-### 3. First scan
+### 3. Validate
+
+```bash
+bash maintenance/validate.sh .
+# or cross-platform:
+python3 maintenance/validate_py.py .
+```
+
+Expected: `74 checks | 74 passed | 0 issues`. If you see an error about `mem-os.json`, you're running in the repo root instead of an initialized workspace.
+
+### 4. First scan
 
 ```bash
 python3 maintenance/intel_scan.py .
 ```
 
-Expected output: `0 critical | 0 warnings` on a fresh workspace.
+Expected: `0 critical | 0 warnings` on a fresh workspace.
 
-### 4. Validate
+### 5. Verify recall + capture
 
 ```bash
-bash maintenance/validate.sh .
+python3 maintenance/recall.py --query "test" --workspace .
+# → No results found. (empty workspace — correct)
+
+python3 maintenance/capture.py .
+# → capture: no daily log for YYYY-MM-DD, nothing to scan (correct)
 ```
 
-74+ structural checks. All pass on fresh init.
-
-### 5. Add skills (optional)
+### 6. Add skills (optional)
 
 ```bash
 cp -r .mem-os/skills/* .claude/skills/ 2>/dev/null || true
 ```
 
-Gives you `/scan`, `/apply`, and `/recall` commands.
+Gives you `/scan`, `/apply`, and `/recall` slash commands in Claude Code.
 
-### 6. Add hooks (optional)
+### 7. Add hooks (optional)
 
 Merge into your `.claude/hooks.json`:
 
@@ -161,17 +175,17 @@ Merge into your `.claude/hooks.json`:
 }
 ```
 
-### 7. Verify
+You're live. Start in `detect_only` for one week, then move to `propose`.
+
+### Smoke Test (optional)
+
+Run the full end-to-end verification:
 
 ```bash
-python3 maintenance/recall.py --query "test" --workspace .
-# → No results found. (empty workspace — correct)
-
-python3 maintenance/capture.py .
-# → capture: no daily log for YYYY-MM-DD, nothing to scan (correct)
+bash .mem-os/scripts/smoke_test.sh
 ```
 
-You're live. Start in `detect_only` for one week, then move to `propose`.
+Creates a temp workspace, runs init → validate → scan → recall → capture → pytest, then cleans up. All 11 checks should pass.
 
 ---
 
@@ -211,7 +225,7 @@ $ bash maintenance/validate.sh .
 TOTAL: 74 checks | 74 passed | 0 issues | 1 warnings
 ```
 
-> Note: Check count scales with data — fresh workspaces have 74 checks, populated workspaces have more. The 1 warning is expected (no weekly summaries yet).
+> Note: validate.sh check count scales with data — fresh workspaces have 74 checks, populated workspaces have more. The 1 warning is expected (no weekly summaries yet). Additionally, 134 pytest unit tests cover all core modules.
 
 ---
 
@@ -272,7 +286,8 @@ your-workspace/
     ├── block_parser.py       # Markdown block parser
     ├── recall.py             # Recall engine (TF-IDF + graph)
     ├── capture.py            # Auto-capture engine
-    └── validate.sh           # Structural validator (74+ checks)
+    ├── validate.sh           # Structural validator (bash, 74+ checks)
+    └── validate_py.py        # Structural validator (Python, cross-platform)
 ```
 
 ---
@@ -299,7 +314,7 @@ Compared against every major memory solution for AI agents (as of 2026):
 | **Integrity & Safety** | | | | | | | | | |
 | Contradiction detection | No | No | No | No | No | No | No | No | **Yes (ConstraintSignatures)** |
 | Drift analysis | No | No | No | No | No | No | No | No | **Yes (dead decisions, orphans)** |
-| Structural validation | No | No | No | No | No | No | No | No | **74+ checks** |
+| Structural validation | No | No | No | No | No | No | No | No | **74+ checks + 134 tests** |
 | Impact graph | No | No | No | No | No | No | No | No | **Yes (decision → task/entity)** |
 | Coverage scoring | No | No | No | No | No | No | No | No | **Yes (% decisions enforced)** |
 | Provenance gate | No | No | No | No | Partial | No | No | No | **Yes (no source = no claim)** |
@@ -508,7 +523,7 @@ All settings in `mem-os.json` (created by `init_workspace.py`):
 ## Requirements
 
 - **Python 3.8+**
-- **Bash** (for hooks and validate.sh)
+- **Bash** (for hooks and validate.sh; optional — `validate_py.py` is the cross-platform alternative)
 - **No external packages** — stdlib only
 
 ### Platform Support
@@ -518,7 +533,50 @@ All settings in `mem-os.json` (created by `init_workspace.py`):
 | Linux | Full | Primary target |
 | macOS | Full | POSIX-compliant shell scripts |
 | Windows (WSL/Git Bash) | Full | Use WSL2 or Git Bash for shell hooks |
-| Windows (native) | Python only | Shell hooks require WSL; Python scripts work natively |
+| Windows (native) | Python only | Use `validate_py.py` instead of `validate.sh`; hooks require WSL |
+
+---
+
+## Security
+
+### Threat Model
+
+| What we protect | How |
+|---|---|
+| Memory integrity | 74+ structural checks, ConstraintSignature validation |
+| Accidental overwrites | Proposal-based mutations only (never direct writes to source of truth) |
+| Rollback safety | Snapshot before every apply, atomic `os.replace()` for state files |
+| Symlink attacks | Symlink detection in restore_snapshot (both SNAPSHOT_DIRS and intel subdirs) |
+| Path traversal | All paths resolved via `os.path.abspath()`, workspace-relative only |
+
+| What we do NOT protect against | Why |
+|---|---|
+| Malicious local user | Single-user CLI tool — if you have filesystem access, you own the data |
+| Network attacks | No network calls, no listening ports, no telemetry |
+| Encrypted storage | Files are plaintext Markdown — use disk encryption if needed |
+
+### No Network Calls
+
+Mem OS makes **zero network calls**. No telemetry, no phoning home, no cloud dependencies. All operations are local filesystem reads and writes. Verify with:
+
+```bash
+grep -rn "http\|socket\|urllib\|requests\|httpx" scripts/ | grep -v "^#\|\.pyc"
+# → Should return nothing
+```
+
+---
+
+## Troubleshooting
+
+| Problem | Solution |
+|---|---|
+| `validate.sh` says "No mem-os.json found" | You're running in the repo root, not a workspace. Run `init_workspace.py` first. |
+| `validate.sh` shows FAIL on fresh init | Should not happen — run `bash scripts/smoke_test.sh` to verify. |
+| `recall` returns no results | Workspace is empty. Add decisions/tasks first, then search. |
+| `capture` says "no daily log" | No `memory/YYYY-MM-DD.md` file for today. Write something first. |
+| `intel_scan` finds 0 contradictions | That's good — means no conflicting decisions. |
+| Tests fail on Windows | Use `validate_py.py` instead of `validate.sh`. Hooks require WSL. |
+| `pip install -e .` fails | Ensure Python 3.8+ and setuptools >= 64. |
 
 ---
 

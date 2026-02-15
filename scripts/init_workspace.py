@@ -62,6 +62,7 @@ MAINTENANCE_SCRIPTS = [
     "recall.py",
     "capture.py",
     "validate.sh",
+    "validate_py.py",
 ]
 
 DEFAULT_CONFIG = {

@@ -318,8 +318,8 @@ class TestFingerprintPayload(unittest.TestCase):
 class TestValidateUninitWorkspace(unittest.TestCase):
     """validate.sh should handle uninitialized workspaces gracefully."""
 
-    def test_creates_maintenance_dir(self):
-        """Running on a dir with no maintenance/ should not crash."""
+    def test_rejects_uninitialized_workspace(self):
+        """Running on a dir with no mem-os.json should exit with clear error."""
         with tempfile.TemporaryDirectory() as ws:
             validate_sh = os.path.join(
                 os.path.dirname(__file__), "..", "scripts", "validate.sh"
@@ -328,10 +328,10 @@ class TestValidateUninitWorkspace(unittest.TestCase):
                 ["bash", validate_sh, ws],
                 capture_output=True, text=True, timeout=30,
             )
-            # It will have issues (missing files) but should not crash
-            self.assertIn("TOTAL:", result.stdout)
-            # The maintenance dir should have been created for the report
-            self.assertTrue(os.path.isdir(os.path.join(ws, "maintenance")))
+            # Should exit with error and helpful message
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("No mem-os.json found", result.stdout)
+            self.assertIn("init_workspace.py", result.stdout)
 
 
 class TestModeGate(unittest.TestCase):

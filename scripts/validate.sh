@@ -8,6 +8,22 @@
 set -uo pipefail
 
 WS="${1:-.}"
+
+# Workspace detection: warn if running in repo root instead of initialized workspace
+if [[ ! -f "$WS/mem-os.json" ]]; then
+  echo "ERROR: No mem-os.json found in '$WS'."
+  echo ""
+  echo "This does not appear to be an initialized mem-os workspace."
+  echo "To initialize a workspace, run:"
+  echo ""
+  echo "  python3 scripts/init_workspace.py /path/to/your/workspace"
+  echo ""
+  echo "Then validate with:"
+  echo ""
+  echo "  bash maintenance/validate.sh /path/to/your/workspace"
+  exit 1
+fi
+
 REPORT="$WS/maintenance/validation-report.txt"
 ISSUES=0
 CHECKS=0
