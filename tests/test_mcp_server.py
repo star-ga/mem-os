@@ -214,6 +214,134 @@ class TestMCPRecallEngine(unittest.TestCase):
         self.assertEqual(len(results), 0)
 
 
+class TestMCPApproveApply(unittest.TestCase):
+    """Test the approve_apply MCP tool."""
+
+    def setUp(self):
+        self.td = tempfile.mkdtemp()
+        os.makedirs(os.path.join(self.td, "decisions"))
+        os.makedirs(os.path.join(self.td, "tasks"))
+        os.makedirs(os.path.join(self.td, "entities"))
+        os.makedirs(os.path.join(self.td, "intelligence", "proposed"), exist_ok=True)
+        os.makedirs(os.path.join(self.td, "intelligence", "applied"), exist_ok=True)
+        os.makedirs(os.path.join(self.td, "memory"))
+
+        # Create empty decisions file
+        with open(os.path.join(self.td, "decisions", "DECISIONS.md"), "w") as f:
+            f.write("# Decisions\n")
+
+        # Create mem-os.json with detect_only mode (blocks apply)
+        with open(os.path.join(self.td, "mem-os.json"), "w") as f:
+            json.dump({"self_correcting_mode": "detect_only"}, f)
+
+        # Create empty proposed files
+        for name in ("DECISIONS_PROPOSED.md", "TASKS_PROPOSED.md", "EDITS_PROPOSED.md"):
+            with open(os.path.join(self.td, "intelligence", "proposed", name), "w") as f:
+                f.write(f"# {name}\n")
+
+        self.mod = _load_server(self.td)
+
+    def tearDown(self):
+        shutil.rmtree(self.td, ignore_errors=True)
+
+    def test_invalid_proposal_id_format(self):
+        fn = self.mod.approve_apply
+        if hasattr(fn, "fn"):
+            result = fn.fn("bad-id", dry_run=True)
+        else:
+            result = fn("bad-id", dry_run=True)
+        parsed = json.loads(result)
+        self.assertIn("error", parsed)
+        self.assertIn("Invalid proposal ID", parsed["error"])
+
+    def test_nonexistent_proposal(self):
+        fn = self.mod.approve_apply
+        if hasattr(fn, "fn"):
+            result = fn.fn("P-20260101-999", dry_run=True)
+        else:
+            result = fn("P-20260101-999", dry_run=True)
+        parsed = json.loads(result)
+        self.assertFalse(parsed["success"])
+
+    def test_defaults_to_dry_run(self):
+        fn = self.mod.approve_apply
+        if hasattr(fn, "fn"):
+            result = fn.fn("P-20260101-001")
+        else:
+            result = fn("P-20260101-001")
+        parsed = json.loads(result)
+        self.assertTrue(parsed["dry_run"])
+
+
+class TestMCPRollback(unittest.TestCase):
+    """Test the rollback_proposal MCP tool."""
+
+    def setUp(self):
+        self.td = tempfile.mkdtemp()
+        os.makedirs(os.path.join(self.td, "decisions"))
+        os.makedirs(os.path.join(self.td, "intelligence", "applied"), exist_ok=True)
+        self.mod = _load_server(self.td)
+
+    def tearDown(self):
+        shutil.rmtree(self.td, ignore_errors=True)
+
+    def test_invalid_timestamp_format(self):
+        fn = self.mod.rollback_proposal
+        if hasattr(fn, "fn"):
+            result = fn.fn("bad-timestamp")
+        else:
+            result = fn("bad-timestamp")
+        parsed = json.loads(result)
+        self.assertIn("error", parsed)
+        self.assertIn("Invalid receipt timestamp", parsed["error"])
+
+    def test_nonexistent_snapshot(self):
+        fn = self.mod.rollback_proposal
+        if hasattr(fn, "fn"):
+            result = fn.fn("20260101-120000")
+        else:
+            result = fn("20260101-120000")
+        parsed = json.loads(result)
+        self.assertFalse(parsed["success"])
+        self.assertEqual(parsed["status"], "rollback_failed")
+
+    def test_valid_format_accepted(self):
+        fn = self.mod.rollback_proposal
+        if hasattr(fn, "fn"):
+            result = fn.fn("20260215-143000")
+        else:
+            result = fn("20260215-143000")
+        parsed = json.loads(result)
+        # Should fail (no snapshot exists) but not due to format validation
+        self.assertNotIn("error", parsed)
+        self.assertEqual(parsed["receipt_ts"], "20260215-143000")
+
+
+class TestMCPTokenAuth(unittest.TestCase):
+    """Test token auth helper."""
+
+    def setUp(self):
+        self.td = tempfile.mkdtemp()
+        os.makedirs(os.path.join(self.td, "decisions"))
+        self._orig_token = os.environ.get("MEM_OS_TOKEN")
+        self.mod = _load_server(self.td)
+
+    def tearDown(self):
+        shutil.rmtree(self.td, ignore_errors=True)
+        if self._orig_token is not None:
+            os.environ["MEM_OS_TOKEN"] = self._orig_token
+        else:
+            os.environ.pop("MEM_OS_TOKEN", None)
+
+    def test_no_token_returns_none(self):
+        os.environ.pop("MEM_OS_TOKEN", None)
+        self.assertIsNone(self.mod._check_token())
+
+    def test_token_from_env(self):
+        os.environ["MEM_OS_TOKEN"] = "test-secret-123"
+        self.assertEqual(self.mod._check_token(), "test-secret-123")
+
+
 class TestMCPServerMeta(unittest.TestCase):
     def setUp(self):
         self.td = tempfile.mkdtemp()

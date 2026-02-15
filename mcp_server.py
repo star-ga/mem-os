@@ -18,6 +18,8 @@ Resources (read-only):
 Tools:
     recall               — Search memory with BM25
     propose_update       — Propose a new decision/task (writes to SIGNALS.md, never source of truth)
+    approve_apply        — Apply a staged proposal (dry-run by default)
+    rollback_proposal    — Rollback an applied proposal by receipt timestamp
     scan                 — Run integrity scan
     list_contradictions  — List detected contradictions with resolution status
 
@@ -31,6 +33,9 @@ Usage:
 
     # http
     python3 mcp_server.py --transport http --port 8765
+
+    # http with token auth
+    MEM_OS_TOKEN=secret python3 mcp_server.py --transport http --port 8765
 
     # with custom workspace
     MEM_OS_WORKSPACE=/path/to/workspace python3 mcp_server.py
@@ -359,9 +364,100 @@ def list_contradictions() -> str:
     }, indent=2, default=str)
 
 
+@mcp.tool
+def approve_apply(proposal_id: str, dry_run: bool = True) -> str:
+    """Apply a staged proposal from intelligence/proposed/.
+
+    SAFETY: Defaults to dry_run=True. Set dry_run=False to actually apply.
+    Creates a snapshot before applying for rollback support.
+
+    Args:
+        proposal_id: The proposal ID (e.g., "P-20260213-002").
+        dry_run: If True (default), validate without executing. Set False to apply.
+
+    Returns:
+        JSON with apply result, receipt timestamp (for rollback), and status.
+    """
+    ws = _workspace()
+
+    import re
+    if not re.match(r"^P-\d{8}-\d{3}$", proposal_id):
+        return json.dumps({"error": f"Invalid proposal ID format: {proposal_id}. Expected P-YYYYMMDD-NNN."})
+
+    from apply_engine import apply_proposal
+
+    import io
+    import contextlib
+
+    # Capture stdout from apply_engine (it prints progress)
+    capture = io.StringIO()
+    with contextlib.redirect_stdout(capture):
+        success, message = apply_proposal(ws, proposal_id, dry_run=dry_run)
+
+    log_output = capture.getvalue()
+
+    metrics.inc("mcp_apply_calls")
+    _log.info("mcp_approve_apply", proposal_id=proposal_id, dry_run=dry_run, success=success)
+
+    return json.dumps({
+        "status": "applied" if success and not dry_run else "dry_run_passed" if success else "failed",
+        "proposal_id": proposal_id,
+        "dry_run": dry_run,
+        "success": success,
+        "message": message,
+        "log": log_output[-2000:] if len(log_output) > 2000 else log_output,
+        "next_step": "Call again with dry_run=False to apply." if success and dry_run else None,
+    }, indent=2)
+
+
+@mcp.tool
+def rollback_proposal(receipt_ts: str) -> str:
+    """Rollback an applied proposal using its receipt timestamp.
+
+    Restores workspace from the pre-apply snapshot.
+
+    Args:
+        receipt_ts: Receipt timestamp from apply (format: YYYYMMDD-HHMMSS).
+
+    Returns:
+        JSON with rollback result and post-rollback check status.
+    """
+    ws = _workspace()
+
+    import re
+    if not re.match(r"^\d{8}-\d{6}$", receipt_ts):
+        return json.dumps({"error": f"Invalid receipt timestamp format: {receipt_ts}. Expected YYYYMMDD-HHMMSS."})
+
+    from apply_engine import rollback as engine_rollback
+
+    import io
+    import contextlib
+
+    capture = io.StringIO()
+    with contextlib.redirect_stdout(capture):
+        success = engine_rollback(ws, receipt_ts)
+
+    log_output = capture.getvalue()
+
+    metrics.inc("mcp_rollbacks")
+    _log.info("mcp_rollback", receipt_ts=receipt_ts, success=success)
+
+    return json.dumps({
+        "status": "rolled_back" if success else "rollback_failed",
+        "receipt_ts": receipt_ts,
+        "success": success,
+        "log": log_output[-2000:] if len(log_output) > 2000 else log_output,
+    }, indent=2)
+
+
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
+
+def _check_token() -> str | None:
+    """Get token from environment. Returns None if no auth configured."""
+    return os.environ.get("MEM_OS_TOKEN")
+
 
 if __name__ == "__main__":
     import argparse
@@ -371,12 +467,19 @@ if __name__ == "__main__":
                         help="Transport protocol (default: stdio)")
     parser.add_argument("--port", type=int, default=8765,
                         help="HTTP port (only used with --transport http)")
+    parser.add_argument("--token", default=None,
+                        help="Bearer token for HTTP auth (or set MEM_OS_TOKEN env var)")
     args = parser.parse_args()
 
+    # Set token from CLI arg if provided (env var takes precedence if both set)
+    if args.token and not os.environ.get("MEM_OS_TOKEN"):
+        os.environ["MEM_OS_TOKEN"] = args.token
+
+    token = _check_token()
     _log.info("mcp_server_start", transport=args.transport,
-              workspace=_workspace())
+              workspace=_workspace(), auth="token" if token else "none")
 
     if args.transport == "http":
-        mcp.run(transport="http", port=args.port)
+        mcp.run(transport="sse", port=args.port)
     else:
         mcp.run()

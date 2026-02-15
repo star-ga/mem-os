@@ -1,0 +1,13 @@
+{
+  "name": "mem-os",
+  "version": "1.0.0",
+  "description": "Persistent, auditable, contradiction-safe memory for coding agents",
+  "server": {
+    "command": "python3",
+    "args": ["mcp_server.py"],
+    "env": {
+      "MEM_OS_WORKSPACE": "."
+    }
+  },
+  "transport": "stdio"
+}

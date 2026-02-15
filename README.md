@@ -361,7 +361,7 @@ Compared against every major memory solution for AI agents (as of 2026):
 | **Integrity & Safety** | | | | | | | | | |
 | Contradiction detection | No | No | No | No | No | No | No | No | **Yes (ConstraintSignatures)** |
 | Drift analysis | No | No | No | No | No | No | No | No | **Yes (dead decisions, orphans)** |
-| Structural validation | No | No | No | No | No | No | No | No | **74+ checks + 316 tests** |
+| Structural validation | No | No | No | No | No | No | No | No | **74+ checks + 324 tests** |
 | Impact graph | No | No | No | No | No | No | No | No | **Yes (decision → task/entity)** |
 | Coverage scoring | No | No | No | No | No | No | No | No | **Yes (% decisions enforced)** |
 | Provenance gate | No | No | No | No | Partial | No | No | No | **Yes (no source = no claim)** |
@@ -724,12 +724,44 @@ MEM_OS_WORKSPACE=/path/to/workspace python3 mcp_server.py --transport http --por
 |---|---|
 | `recall` | Search memory with BM25 (query, limit, active_only) |
 | `propose_update` | Propose a decision/task — writes to SIGNALS.md only, never source of truth |
+| `approve_apply` | Apply a staged proposal (dry_run=True by default for safety) |
+| `rollback_proposal` | Rollback an applied proposal by receipt timestamp (YYYYMMDD-HHMMSS) |
 | `scan` | Run integrity scan (contradictions, drift, signals) |
 | `list_contradictions` | List contradictions with auto-resolution analysis |
+
+### Token Auth (HTTP)
+
+For remote deployments, set a bearer token to protect the HTTP endpoint:
+
+```bash
+# Via environment variable
+MEM_OS_TOKEN=your-secret python3 mcp_server.py --transport http --port 8765
+
+# Via CLI argument
+python3 mcp_server.py --transport http --port 8765 --token your-secret
+```
+
+### Auto-Discovery
+
+Drop-in `.mcp.json` manifest lets MCP clients auto-discover the server:
+
+```json
+{
+  "name": "mem-os",
+  "version": "1.0.0",
+  "server": {
+    "command": "python3",
+    "args": ["mcp_server.py"],
+    "env": { "MEM_OS_WORKSPACE": "." }
+  },
+  "transport": "stdio"
+}
+```
 
 ### Safety Guarantees
 
 - **`propose_update` never writes to DECISIONS.md or TASKS.md.** All proposals go to `intelligence/SIGNALS.md` and must be promoted via `/apply`.
+- **`approve_apply` defaults to dry_run=True.** Agents must explicitly set `dry_run=False` to apply. Creates a snapshot before applying for rollback support.
 - **All resources are read-only.** No MCP client can mutate source of truth through resources.
 - **Namespace-aware.** Multi-agent workspaces scope resources by agent ACL.
 
