@@ -22,6 +22,11 @@ classifiers = [
     "Topic :: Software Development :: Libraries",
 ]
 
+[project.optional-dependencies]
+mcp = ["fastmcp>=2.0"]
+embeddings = ["sentence-transformers>=2.0"]
+all = ["fastmcp>=2.0", "sentence-transformers>=2.0"]
+
 [project.urls]
 Homepage = "https://github.com/star-ga/mem-os"
 Repository = "https://github.com/star-ga/mem-os"

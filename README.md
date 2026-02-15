@@ -361,7 +361,7 @@ Compared against every major memory solution for AI agents (as of 2026):
 | **Integrity & Safety** | | | | | | | | | |
 | Contradiction detection | No | No | No | No | No | No | No | No | **Yes (ConstraintSignatures)** |
 | Drift analysis | No | No | No | No | No | No | No | No | **Yes (dead decisions, orphans)** |
-| Structural validation | No | No | No | No | No | No | No | No | **74+ checks + 324 tests** |
+| Structural validation | No | No | No | No | No | No | No | No | **74+ checks + 369 tests** |
 | Impact graph | No | No | No | No | No | No | No | No | **Yes (decision → task/entity)** |
 | Coverage scoring | No | No | No | No | No | No | No | No | **Yes (% decisions enforced)** |
 | Provenance gate | No | No | No | No | Partial | No | No | No | **Yes (no source = no claim)** |

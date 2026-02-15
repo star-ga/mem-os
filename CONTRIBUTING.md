@@ -2,50 +2,92 @@
 
 Thanks for your interest in contributing to Mem OS.
 
-## How to Contribute
-
-1. **Open an issue first** — Describe what you want to change and why. This avoids duplicate work and ensures alignment.
-
-2. **Fork the repo** — Create a fork and work on a feature branch.
-
-3. **Keep it simple** — Mem OS has zero external dependencies. Any contribution must maintain this constraint for the core. Vector backends are the exception (they go in optional modules).
-
-4. **Test your changes** — Run the full validation suite on a fresh workspace:
+## Development Setup
 
 ```bash
-# Create a test workspace
-python3 scripts/init_workspace.py /tmp/test-ws
-
-# Run integrity scan
-python3 scripts/intel_scan.py /tmp/test-ws
-
-# Run structural validation
-bash scripts/validate.sh /tmp/test-ws
+git clone https://github.com/star-ga/mem-os.git
+cd mem-os
+pip install -e ".[all]"
 ```
 
-5. **Submit a PR** — Reference the issue number in your PR description.
+This installs mem-os in editable mode with all optional dependencies (FastMCP for the MCP server, sentence-transformers for embedding re-rank).
 
-## What We're Looking For
+For core development only (no optional deps):
 
-- Bug fixes with reproduction steps
-- New integrity checks for `validate.sh`
-- New detection patterns for `capture.py`
-- Vector backend implementations (`recall_vector.py`)
-- Documentation improvements
-- Performance improvements (especially for large workspaces)
+```bash
+pip install -e .
+```
 
-## What We Won't Merge
+## Running Tests
 
-- External dependency additions to core scripts
-- Changes that break backward compatibility with existing workspaces
-- Auto-write to source of truth (decisions/tasks) without going through the proposal pipeline
-- Features that require a daemon or background process
+```bash
+# Unit tests
+python3 -m pytest tests/ -v
 
-## Code Style
+# Structural validation (74+ checks)
+bash maintenance/validate.sh /path/to/workspace
+# or cross-platform:
+python3 maintenance/validate_py.py /path/to/workspace
 
-- Python: Follow existing patterns in the codebase. No type stubs or annotations unless they add clarity.
-- Bash: Use `set -euo pipefail`. Quote variables. Use `shellcheck` if available.
-- Markdown: Use `## [ID]` block format. Keep templates minimal.
+# End-to-end smoke test
+bash scripts/smoke_test.sh
+```
+
+## Setting Up the MCP Server Locally
+
+1. Install the MCP dependency:
+
+```bash
+pip install "fastmcp>=2.0"
+```
+
+2. Initialize a test workspace:
+
+```bash
+python3 scripts/init_workspace.py /tmp/test-ws
+```
+
+3. Run the server:
+
+```bash
+# stdio transport (for Claude Desktop / OpenClaw)
+MEM_OS_WORKSPACE=/tmp/test-ws python3 mcp_server.py
+
+# HTTP transport (for multi-client / remote)
+MEM_OS_WORKSPACE=/tmp/test-ws python3 mcp_server.py --transport http --port 8765
+```
+
+4. Add to Claude Desktop config (`~/.claude/claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "mem-os": {
+      "command": "python3",
+      "args": ["/path/to/mem-os/mcp_server.py"],
+      "env": {"MEM_OS_WORKSPACE": "/path/to/workspace"}
+    }
+  }
+}
+```
+
+## Submitting to modelcontextprotocol/servers
+
+1. Fork `modelcontextprotocol/servers` on GitHub.
+2. Add an entry to the community servers section following the existing format.
+3. Include: server name, short description, install command, and link to this repo.
+4. Open a pull request with the addition.
+5. See `mcp-listing.md` in this repo for the prepared listing template.
+
+## Guidelines
+
+- Keep zero-dependency policy for core modules (stdlib only).
+- All mutations to source of truth must go through the apply engine.
+- Add tests for new functionality in `tests/`.
+- Run `python3 -m pytest tests/ -v` before submitting a PR.
+- Follow existing code style (120 char line length, type hints where practical).
+- No auto-write to source of truth (decisions/tasks) without going through the proposal pipeline.
+- No features that require a daemon or background process.
 
 ## License
 
