@@ -117,7 +117,10 @@ def find_proposal(ws, proposal_id):
         path = os.path.join(ws, pfile)
         if not os.path.isfile(path):
             continue
-        blocks = parse_file(path)
+        try:
+            blocks = parse_file(path)
+        except (OSError, UnicodeDecodeError, ValueError):
+            continue
         for b in blocks:
             if b.get("ProposalId") == proposal_id or b.get("_id") == proposal_id:
                 return b, path

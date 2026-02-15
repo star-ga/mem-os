@@ -98,7 +98,7 @@ def append_signals(workspace, signals, date_str):
     new_signals = []
     for sig in signals:
         # Simple dedup: skip if the text excerpt already appears
-        if sig["text"][:60] in existing:
+        if sig["text"][:100] in existing:
             continue
         new_signals.append(sig)
 
@@ -116,6 +116,8 @@ def append_signals(workspace, signals, date_str):
 
     with open(signals_path, "a") as f:
         for sig in new_signals:
+            if counter > 999:
+                break  # Cap at 999 signals per day to maintain ID format
             sig_id = f"SIG-{today_compact}-{counter:03d}"
             f.write(f"\n[{sig_id}]\n")
             f.write(f"Date: {date_str}\n")

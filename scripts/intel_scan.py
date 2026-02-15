@@ -122,11 +122,13 @@ def load_intel_state(ws):
 
 
 def save_intel_state(ws, state):
-    """Save intel-state.json."""
+    """Save intel-state.json atomically (write to temp, then rename)."""
     path = f"{ws}/memory/intel-state.json"
-    with open(path, "w") as f:
+    tmp_path = path + ".tmp"
+    with open(tmp_path, "w") as f:
         json.dump(state, f, indent=2, default=str)
         f.write("\n")
+    os.replace(tmp_path, path)
 
 
 # ═══════════════════════════════════════════════
@@ -396,12 +398,17 @@ def detect_drift(data, report):
                 max_priority = max(max_priority, int(s.get("priority", 0)))
             except (ValueError, TypeError):
                 pass
-        # Also check decision-level Priority field
-        try:
-            dec_priority = int(d.get("Priority", "0"))
-            max_priority = max(max_priority, dec_priority)
-        except (ValueError, TypeError):
-            pass
+        # Also check decision-level Priority field (handles both numeric and P0-P3 format)
+        dec_pri_str = d.get("Priority", "")
+        if isinstance(dec_pri_str, str) and dec_pri_str.startswith("P") and len(dec_pri_str) == 2:
+            # P0 = highest (map to 10), P1 = 9, P2 = 7, P3 = 5
+            pri_map = {"P0": 10, "P1": 9, "P2": 7, "P3": 5}
+            max_priority = max(max_priority, pri_map.get(dec_pri_str, 0))
+        elif dec_pri_str:
+            try:
+                max_priority = max(max_priority, int(dec_pri_str))
+            except (ValueError, TypeError):
+                pass
 
         if max_priority < 7:
             dead_skipped_low_priority += 1

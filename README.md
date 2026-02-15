@@ -93,7 +93,7 @@ Pluggable embedding backend — local (Qdrant + Ollama) or cloud (Pinecone). Fal
 ### Auto-Capture (safe)
 Session-end hook detects decision-like language and writes to `SIGNALS.md` only. Never touches source of truth directly. All signals go through `/apply`.
 
-### 80+ Structural Checks
+### 74+ Structural Checks
 `validate.sh` checks schemas, cross-references, ID formats, status values, supersede chains, ConstraintSignatures, and more.
 
 ### Audit Trail
@@ -132,7 +132,7 @@ Expected output: `0 critical | 0 warnings` on a fresh workspace.
 bash maintenance/validate.sh .
 ```
 
-80+ structural checks. All pass on fresh init.
+74+ structural checks. All pass on fresh init.
 
 ### 5. Add skills (optional)
 
@@ -208,10 +208,10 @@ TOTAL: 0 critical | 0 warnings | 16 info
 ```
 $ bash maintenance/validate.sh .
 
-TOTAL: 73 checks | 73 passed | 0 issues | 1 warnings
+TOTAL: 74 checks | 74 passed | 0 issues | 1 warnings
 ```
 
-> Note: Check count scales with data — fresh workspaces have ~73 checks, populated workspaces have more. The 1 warning is expected (no weekly summaries yet).
+> Note: Check count scales with data — fresh workspaces have 74 checks, populated workspaces have more. The 1 warning is expected (no weekly summaries yet).
 
 ---
 
@@ -272,7 +272,7 @@ your-workspace/
     ├── block_parser.py       # Markdown block parser
     ├── recall.py             # Recall engine (TF-IDF + graph)
     ├── capture.py            # Auto-capture engine
-    └── validate.sh           # Structural validator (80+ checks)
+    └── validate.sh           # Structural validator (74+ checks)
 ```
 
 ---
@@ -299,7 +299,7 @@ Compared against every major memory solution for AI agents (as of 2026):
 | **Integrity & Safety** | | | | | | | | | |
 | Contradiction detection | No | No | No | No | No | No | No | No | **Yes (ConstraintSignatures)** |
 | Drift analysis | No | No | No | No | No | No | No | No | **Yes (dead decisions, orphans)** |
-| Structural validation | No | No | No | No | No | No | No | No | **80+ checks** |
+| Structural validation | No | No | No | No | No | No | No | No | **74+ checks** |
 | Impact graph | No | No | No | No | No | No | No | No | **Yes (decision → task/entity)** |
 | Coverage scoring | No | No | No | No | No | No | No | No | **Yes (% decisions enforced)** |
 | Provenance gate | No | No | No | No | Partial | No | No | No | **Yes (no source = no claim)** |
