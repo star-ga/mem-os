@@ -7,7 +7,7 @@ import tempfile
 import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
-from recall import tokenize, extract_text, get_block_type, get_excerpt, recall
+from recall import tokenize, extract_text, get_block_type, get_excerpt, recall, build_xref_graph
 
 
 class TestTokenize(unittest.TestCase):
@@ -146,6 +146,100 @@ class TestRecall(unittest.TestCase):
             self.assertEqual(len(results), 2)
             # Active block should rank higher
             self.assertEqual(results[0]["_id"], "D-20260213-002")
+
+
+class TestBuildXrefGraph(unittest.TestCase):
+    """Tests for cross-reference graph construction."""
+
+    def test_bidirectional_edges(self):
+        blocks = [
+            {"_id": "D-20260213-001", "Statement": "Use JWT", "Context": "See T-20260213-001"},
+            {"_id": "T-20260213-001", "Title": "Implement auth"},
+        ]
+        graph = build_xref_graph(blocks)
+        self.assertIn("T-20260213-001", graph["D-20260213-001"])
+        self.assertIn("D-20260213-001", graph["T-20260213-001"])
+
+    def test_no_self_edges(self):
+        blocks = [
+            {"_id": "D-20260213-001", "Statement": "This is D-20260213-001"},
+        ]
+        graph = build_xref_graph(blocks)
+        self.assertNotIn("D-20260213-001", graph["D-20260213-001"])
+
+    def test_unknown_ids_ignored(self):
+        blocks = [
+            {"_id": "D-20260213-001", "Statement": "Ref D-20260213-999"},
+        ]
+        graph = build_xref_graph(blocks)
+        self.assertEqual(len(graph["D-20260213-001"]), 0)
+
+
+class TestGraphRecall(unittest.TestCase):
+    """Tests for graph-boosted recall."""
+
+    def _setup_workspace(self, tmpdir, decisions_content="", tasks_content=""):
+        for d in ["decisions", "tasks", "entities", "intelligence"]:
+            os.makedirs(os.path.join(tmpdir, d), exist_ok=True)
+        with open(os.path.join(tmpdir, "decisions", "DECISIONS.md"), "w") as f:
+            f.write(decisions_content)
+        with open(os.path.join(tmpdir, "tasks", "TASKS.md"), "w") as f:
+            f.write(tasks_content or "[T-20260213-099]\nTitle: Unrelated placeholder\nStatus: active\n")
+        for fname in ["entities/projects.md", "entities/people.md",
+                       "entities/tools.md", "entities/incidents.md",
+                       "intelligence/CONTRADICTIONS.md", "intelligence/DRIFT.md",
+                       "intelligence/SIGNALS.md"]:
+            path = os.path.join(tmpdir, fname)
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "w") as f:
+                f.write(f"# {os.path.basename(fname)}\n")
+        return tmpdir
+
+    def test_graph_discovers_neighbor(self):
+        """Graph recall should surface blocks connected to keyword matches."""
+        with tempfile.TemporaryDirectory() as td:
+            decisions = (
+                "[D-20260213-001]\nStatement: Use PostgreSQL database\n"
+                "Status: active\nDate: 2026-02-13\n"
+            )
+            tasks = (
+                "[T-20260213-001]\nTitle: Set up database migration\n"
+                "Status: active\nDate: 2026-02-13\n"
+                "AlignsWith: D-20260213-001\n"
+                "\n---\n\n"
+                "[T-20260213-099]\nTitle: Unrelated placeholder\nStatus: active\n"
+            )
+            ws = self._setup_workspace(td, decisions, tasks)
+
+            # Without graph: "PostgreSQL" only matches the decision
+            results_no_graph = recall(ws, "PostgreSQL", graph_boost=False)
+            ids_no_graph = [r["_id"] for r in results_no_graph]
+            self.assertIn("D-20260213-001", ids_no_graph)
+            self.assertNotIn("T-20260213-001", ids_no_graph)
+
+            # With graph: task should appear via neighbor boost
+            results_graph = recall(ws, "PostgreSQL", graph_boost=True)
+            ids_graph = [r["_id"] for r in results_graph]
+            self.assertIn("D-20260213-001", ids_graph)
+            self.assertIn("T-20260213-001", ids_graph)
+
+    def test_graph_boost_marks_results(self):
+        """Graph-discovered results should have via_graph flag."""
+        with tempfile.TemporaryDirectory() as td:
+            decisions = (
+                "[D-20260213-001]\nStatement: Use PostgreSQL database\n"
+                "Status: active\nDate: 2026-02-13\n"
+            )
+            tasks = (
+                "[T-20260213-001]\nTitle: Setup migration\n"
+                "Status: active\nAlignsWith: D-20260213-001\n"
+                "\n---\n\n"
+                "[T-20260213-099]\nTitle: Unrelated placeholder\nStatus: active\n"
+            )
+            ws = self._setup_workspace(td, decisions, tasks)
+            results = recall(ws, "PostgreSQL", graph_boost=True)
+            graph_results = [r for r in results if r.get("via_graph")]
+            self.assertGreater(len(graph_results), 0)
 
 
 if __name__ == "__main__":

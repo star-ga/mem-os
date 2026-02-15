@@ -84,6 +84,9 @@ All changes flow through graduated modes: `detect_only` → `propose` → `enfor
 ### Lexical Recall
 Field-weighted TF-IDF search across all memory. Zero dependencies. Fast and deterministic.
 
+### Graph-Based Recall
+Cross-reference neighbor boosting — when a keyword match is found, blocks that reference or are referenced by the match get boosted. Surfaces related decisions, tasks, and entities that share no keywords but are structurally connected. Zero dependencies.
+
 ### Vector Recall (optional)
 Pluggable embedding backend — local (Qdrant + Ollama) or cloud (Pinecone). Falls back to TF-IDF when unavailable.
 
@@ -218,7 +221,7 @@ TOTAL: 73 checks | 73 passed | 0 issues | 1 warnings
 |---|---|
 | `/scan` | Run integrity scan — contradictions, drift, dead decisions, impact graph, snapshot, briefing |
 | `/apply` | Review and apply proposals from scan results (dry-run first, then apply) |
-| `/recall <query>` | Search across all memory files with ranked results |
+| `/recall <query>` | Search across all memory files with ranked results (add `--graph` for cross-reference boosting) |
 
 ---
 
@@ -241,7 +244,12 @@ your-workspace/
 │
 ├── memory/
 │   ├── YYYY-MM-DD.md        # Daily logs (append-only)
-│   └── intel-state.json     # Scanner state + metrics
+│   ├── intel-state.json     # Scanner state + metrics
+│   └── maint-state.json     # Maintenance state
+│
+├── summaries/
+│   ├── weekly/              # Weekly summaries
+│   └── daily/               # Daily summaries
 │
 ├── intelligence/
 │   ├── CONTRADICTIONS.md    # Detected contradictions
@@ -251,15 +259,19 @@ your-workspace/
 │   ├── BRIEFINGS.md         # Weekly briefings
 │   ├── AUDIT.md             # Applied proposal audit trail
 │   ├── SCAN_LOG.md          # Scan history
-│   └── proposed/            # Staged proposals
-│       ├── DECISIONS_PROPOSED.md
-│       ├── TASKS_PROPOSED.md
-│       └── EDITS_PROPOSED.md
+│   ├── proposed/            # Staged proposals
+│   │   ├── DECISIONS_PROPOSED.md
+│   │   ├── TASKS_PROPOSED.md
+│   │   └── EDITS_PROPOSED.md
+│   ├── applied/             # Snapshot archives (rollback)
+│   └── state/snapshots/     # State snapshots
 │
 └── maintenance/
     ├── intel_scan.py         # Integrity scanner
     ├── apply_engine.py       # Proposal apply engine
     ├── block_parser.py       # Markdown block parser
+    ├── recall.py             # Recall engine (TF-IDF + graph)
+    ├── capture.py            # Auto-capture engine
     └── validate.sh           # Structural validator (80+ checks)
 ```
 
@@ -276,7 +288,7 @@ Compared against every major memory solution for AI agents (as of 2026):
 | **Recall & Search** | | | | | | | | | |
 | Semantic recall (vector) | Cloud | Cloud | ChromaDB | Yes | Yes | Yes | Yes | Yes | **Optional (local/cloud)** |
 | Lexical recall (keyword) | Filter | No | No | No | No | No | No | No | **TF-IDF with field boosts** |
-| Graph-based recall | Yes | No | No | No | Yes | No | Yes | Yes | Planned |
+| Graph-based recall | Yes | No | No | No | Yes | No | Yes | Yes | **Yes (xref neighbor boost)** |
 | Hybrid search | Partial | No | No | No | Yes | No | Yes | Yes | **TF-IDF + optional vector** |
 | **Memory Persistence** | | | | | | | | | |
 | Structured memory | JSON | JSON | SQLite | Memory blocks | Graph | KV store | Graph | Graph | **Markdown blocks** |
@@ -316,7 +328,7 @@ Compared against every major memory solution for AI agents (as of 2026):
 | **LangMem** | Native LangChain/LangGraph integration | Tied to LangChain ecosystem |
 | **Cognee** | Advanced chunking, web content bridging | Research-oriented, complex setup |
 | **Graphlit** | Multimodal ingestion, semantic search, managed platform | Cloud-only, managed service |
-| **Mem OS** | Integrity + self-correction + zero deps + local-first | Lexical recall by default (vector optional) |
+| **Mem OS** | Integrity + self-correction + zero deps + local-first | Lexical + graph recall by default (vector optional) |
 
 ### The Gap Mem OS Fills
 
@@ -343,6 +355,14 @@ python3 maintenance/recall.py --query "deadline" --active-only --workspace .
 ```
 
 Field-weighted TF-IDF with boosts for recency, active status, and priority. Searches across all structured files. Zero dependencies.
+
+### Graph-Based (cross-reference neighbor boost)
+
+```bash
+python3 maintenance/recall.py --query "database" --graph --workspace .
+```
+
+Adds graph traversal to TF-IDF: when a block matches your query, its 1-hop cross-reference neighbors also appear in results (tagged `[graph]`). This surfaces related blocks that share no keywords but are structurally connected via `AlignsWith`, `Dependencies`, `Supersedes`, `Sources`, ConstraintSignature scopes, and any other block ID mention.
 
 ### Optional: Vector (pluggable)
 
@@ -452,16 +472,12 @@ All settings in `mem-os.json` (created by `init_workspace.py`):
 ```json
 {
   "version": "1.0.0",
+  "workspace_path": ".",
   "auto_capture": true,
   "auto_recall": true,
   "self_correcting_mode": "detect_only",
   "recall": {
-    "backend": "tfidf",
-    "vector": {
-      "provider": "qdrant",
-      "model": "all-MiniLM-L6-v2",
-      "url": "http://localhost:6333"
-    }
+    "backend": "tfidf"
   },
   "proposal_budget": {
     "per_run": 3,
@@ -474,12 +490,17 @@ All settings in `mem-os.json` (created by `init_workspace.py`):
 
 | Key | Default | Description |
 |---|---|---|
+| `version` | `"1.0.0"` | Config schema version |
 | `auto_capture` | `true` | Run capture engine on session end |
 | `auto_recall` | `true` | Show recall context on session start |
 | `self_correcting_mode` | `"detect_only"` | Governance mode |
 | `recall.backend` | `"tfidf"` | `"tfidf"` or `"vector"` |
+| `recall.vector.provider` | — | Vector backend: `"qdrant"` or `"pinecone"` (optional) |
+| `recall.vector.model` | — | Embedding model name (optional) |
+| `recall.vector.url` | — | Vector DB endpoint (optional) |
 | `proposal_budget.per_run` | `3` | Max proposals generated per scan |
 | `proposal_budget.per_day` | `6` | Max proposals per day |
+| `proposal_budget.backlog_limit` | `30` | Max pending proposals before pausing generation |
 | `scan_schedule` | `"daily"` | `"daily"` or `"manual"` |
 
 ---

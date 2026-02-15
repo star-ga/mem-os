@@ -1,18 +1,24 @@
 # /recall — Memory Search
 
-Lexical search across all structured memory files. Default backend: TF-IDF with field boosts and recency weighting. Optional: vector/embedding backend (configure in mem-os.json). Returns ranked results with block ID, type, score, excerpt, and file path.
+Search across all structured memory files. Default backend: TF-IDF with field boosts and recency weighting. Optional: graph-based cross-reference boosting (`--graph`). Optional: vector/embedding backend (configure in mem-os.json). Returns ranked results with block ID, type, score, excerpt, and file path.
 
 ## When to Use
 - Before making decisions (check if a similar decision already exists)
 - When asked about past events, decisions, or tasks
 - To find related context for a current problem
 - To check what's known about a person, project, or tool
+- To explore connections between decisions and tasks (`--graph`)
 
 ## How to Run
 
 ### Basic Search
 ```bash
 python3 maintenance/recall.py --query "authentication" --workspace "${MEM_OS_WORKSPACE:-.}"
+```
+
+### Graph-Boosted Search (cross-reference neighbor discovery)
+```bash
+python3 maintenance/recall.py --query "database" --graph --workspace "${MEM_OS_WORKSPACE:-.}"
 ```
 
 ### JSON Output (for programmatic use)
@@ -41,3 +47,4 @@ Results are ranked by TF-IDF relevance with boosts for:
 - **Recency** — Recent items score higher
 - **Active status** — Active items get 1.2x boost
 - **Priority** — P0/P1 items get 1.1x boost
+- **Graph neighbors** — With `--graph`, blocks connected via cross-references to keyword matches get a 0.3x boost (tagged `[graph]` in output)

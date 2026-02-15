@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""mem-os Lexical Recall Engine (TF-IDF). Zero external deps.
+"""mem-os Recall Engine (TF-IDF + Graph). Zero external deps.
 
 Default recall backend: ranked keyword search using TF-IDF scoring
-with field boosts and recency weighting. Fast, predictable, no deps.
+with field boosts, recency weighting, and optional graph-based
+neighbor boosting via cross-reference traversal.
 
 For semantic recall (embeddings), see RecallBackend interface below.
 Optional vector backends (Qdrant/Pinecone) can be plugged in via config.
@@ -11,6 +12,7 @@ Usage:
     python3 scripts/recall.py --query "authentication" --workspace "."
     python3 scripts/recall.py --query "auth" --workspace "." --json --limit 5
     python3 scripts/recall.py --query "deadline" --active-only
+    python3 scripts/recall.py --query "database" --graph --workspace .
 """
 
 import argparse
@@ -139,7 +141,71 @@ def date_score(block):
         return 0.5
 
 
-def recall(workspace, query, limit=10, active_only=False):
+# ---------------------------------------------------------------------------
+# Graph-based recall — cross-reference neighbor boosting
+# ---------------------------------------------------------------------------
+
+# Regex matching any block ID pattern (D-..., T-..., PRJ-..., etc.)
+_BLOCK_ID_RE = re.compile(
+    r"\b(D-\d{8}-\d{3}|T-\d{8}-\d{3}|PRJ-\d{3}|PER-\d{3}|TOOL-\d{3}"
+    r"|INC-\d{3}|C-\d{8}-\d{3}|SIG-\d{8}-\d{3}|P-\d{8}-\d{3})\b"
+)
+
+# Graph neighbor boost factor: a neighbor gets this fraction of the referencing block's score
+GRAPH_BOOST_FACTOR = 0.3
+
+
+def build_xref_graph(all_blocks):
+    """Build bidirectional adjacency graph from cross-references.
+
+    Scans every block's text fields for mentions of other block IDs.
+    Returns {block_id: set(neighbor_ids)} with edges in both directions.
+    """
+    block_ids = {b.get("_id") for b in all_blocks if b.get("_id")}
+    graph = {bid: set() for bid in block_ids}
+
+    # Fields to scan for cross-references
+    xref_fields = SEARCH_FIELDS + [
+        "Supersedes", "SupersededBy", "AlignsWith", "Dependencies",
+        "Next", "Sources", "Evidence", "Rollback", "History",
+    ]
+
+    for block in all_blocks:
+        bid = block.get("_id")
+        if not bid:
+            continue
+
+        # Collect all text from the block
+        texts = []
+        for field in xref_fields:
+            val = block.get(field, "")
+            if isinstance(val, str):
+                texts.append(val)
+            elif isinstance(val, list):
+                texts.extend(str(v) for v in val)
+
+        # Also scan ConstraintSignature scope.projects
+        for sig in block.get("ConstraintSignatures", []):
+            scope = sig.get("scope", {})
+            if isinstance(scope, dict):
+                for v in scope.values():
+                    if isinstance(v, list):
+                        texts.extend(str(x) for x in v)
+                    elif isinstance(v, str):
+                        texts.append(v)
+
+        # Find all referenced block IDs
+        full_text = " ".join(texts)
+        for match in _BLOCK_ID_RE.finditer(full_text):
+            ref_id = match.group(1)
+            if ref_id != bid and ref_id in block_ids:
+                graph[bid].add(ref_id)
+                graph[ref_id].add(bid)  # bidirectional
+
+    return graph
+
+
+def recall(workspace, query, limit=10, active_only=False, graph_boost=False):
     """Search across all memory files. Returns ranked results."""
     query_tokens = tokenize(query)
     if not query_tokens:
@@ -226,6 +292,50 @@ def recall(workspace, query, limit=10, active_only=False):
             "status": status,
         })
 
+    # Graph-based neighbor boosting: propagate score to 1-hop neighbors
+    if graph_boost and results:
+        xref_graph = build_xref_graph(all_blocks)
+        score_by_id = {r["_id"]: r["score"] for r in results}
+        # Blocks not yet in results can be added via graph traversal
+        block_by_id = {b.get("_id"): b for b in all_blocks if b.get("_id")}
+
+        neighbor_scores = {}
+        for r in results:
+            for neighbor_id in xref_graph.get(r["_id"], set()):
+                if neighbor_id not in score_by_id:
+                    # New block discovered via graph — add with boosted score
+                    boost = r["score"] * GRAPH_BOOST_FACTOR
+                    neighbor_scores[neighbor_id] = (
+                        neighbor_scores.get(neighbor_id, 0) + boost
+                    )
+                else:
+                    # Existing result — additional graph boost
+                    boost = r["score"] * GRAPH_BOOST_FACTOR * 0.5
+                    neighbor_scores[neighbor_id] = (
+                        neighbor_scores.get(neighbor_id, 0) + boost
+                    )
+
+        # Apply boosts to existing results
+        for r in results:
+            if r["_id"] in neighbor_scores:
+                r["score"] = round(r["score"] + neighbor_scores[r["_id"]], 4)
+                r["via_graph"] = True
+
+        # Add new neighbors discovered via graph
+        for nid, nscore in neighbor_scores.items():
+            if nid not in score_by_id and nid in block_by_id:
+                nb = block_by_id[nid]
+                results.append({
+                    "_id": nid,
+                    "type": get_block_type(nid),
+                    "score": round(nscore, 4),
+                    "excerpt": get_excerpt(nb),
+                    "file": nb.get("_source_file", "?"),
+                    "line": nb.get("_line", 0),
+                    "status": nb.get("Status", ""),
+                    "via_graph": True,
+                })
+
     # Sort by score descending
     results.sort(key=lambda r: r["score"], reverse=True)
     return results[:limit]
@@ -256,6 +366,7 @@ def main():
     parser.add_argument("--workspace", "-w", default=".", help="Workspace path")
     parser.add_argument("--limit", "-l", type=int, default=10, help="Max results")
     parser.add_argument("--active-only", action="store_true", help="Only search active blocks")
+    parser.add_argument("--graph", action="store_true", help="Enable graph-based neighbor boosting")
     parser.add_argument("--json", action="store_true", help="Output as JSON")
     args = parser.parse_args()
 
@@ -266,9 +377,9 @@ def main():
             results = backend.search(args.workspace, args.query, args.limit, args.active_only)
         except (OSError, ValueError, TypeError) as e:
             print(f"recall: backend error ({e}), falling back to TF-IDF", file=sys.stderr)
-            results = recall(args.workspace, args.query, args.limit, args.active_only)
+            results = recall(args.workspace, args.query, args.limit, args.active_only, args.graph)
     else:
-        results = recall(args.workspace, args.query, args.limit, args.active_only)
+        results = recall(args.workspace, args.query, args.limit, args.active_only, args.graph)
 
     if args.json:
         print(json.dumps(results, indent=2))
@@ -277,7 +388,8 @@ def main():
             print("No results found.")
         else:
             for r in results:
-                print(f"[{r['score']:.3f}] {r['_id']} ({r['type']}) — {r['excerpt'][:80]}")
+                graph_tag = " [graph]" if r.get("via_graph") else ""
+                print(f"[{r['score']:.3f}] {r['_id']} ({r['type']}{graph_tag}) — {r['excerpt'][:80]}")
                 print(f"        {r['file']}:{r['line']}")
 
 
