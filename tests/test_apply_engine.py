@@ -65,6 +65,7 @@ class TestValidateProposal(unittest.TestCase):
         base = {
             "ProposalId": "P-20260213-001",
             "Type": "decision",
+            "TargetBlock": "D-20260213-001",
             "Risk": "low",
             "Status": "staged",
             "Evidence": "Test evidence",

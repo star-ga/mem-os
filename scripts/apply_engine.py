@@ -95,7 +95,7 @@ def validate_proposal(proposal):
     errors = []
 
     # Required fields
-    for field in ("ProposalId", "Type", "Risk", "Status", "Evidence", "Rollback"):
+    for field in ("ProposalId", "Type", "TargetBlock", "Risk", "Status", "Evidence", "Rollback"):
         if not proposal.get(field):
             errors.append(f"Missing required field: {field}")
 
@@ -914,6 +914,9 @@ def apply_proposal(ws, proposal_id, dry_run=False):
 
     # 7. Generate DIFF.txt
     files_touched = proposal.get("FilesTouched", [])
+    if not files_touched:
+        # Derive from Ops when FilesTouched is absent
+        files_touched = list({op.get("file", "") for op in proposal.get("Ops", []) if op.get("file")})
     diff_path = generate_diff_artifact(ws, snap_dir, files_touched)
     print(f"  Diff artifact: {diff_path}")
 

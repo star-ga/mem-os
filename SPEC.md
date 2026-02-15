@@ -44,7 +44,7 @@ Value         ::= { AnyChar }                       (* until NewLine *)
 
 | Type | Required Fields |
 |---|---|
-| Decision (D-) | Date, Status, Statement |
+| Decision (D-) | Date, Status, Statement, Rationale, Supersedes, Tags, Sources |
 | Task (T-) | Date, Status, Title |
 | Project (PRJ-) | Name, Status |
 | Person (PER-) | Name |
