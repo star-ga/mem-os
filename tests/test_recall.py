@@ -41,6 +41,11 @@ class TestExtractText(unittest.TestCase):
         self.assertIn("we", text)
         self.assertIn("must_use", text)
 
+    def test_includes_block_id(self):
+        block = {"_id": "D-20260214-001", "Statement": "Use JWT"}
+        text = extract_text(block)
+        self.assertIn("D-20260214-001", text)
+
     def test_empty_block(self):
         self.assertEqual(extract_text({}).strip(), "")
 

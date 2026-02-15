@@ -84,6 +84,10 @@ def tokenize(text):
 def extract_text(block):
     """Extract searchable text from a block."""
     parts = []
+    # Include block ID so users can search by ID
+    bid = block.get("_id", "")
+    if bid:
+        parts.append(bid)
     for field in SEARCH_FIELDS:
         val = block.get(field, "")
         if isinstance(val, str):

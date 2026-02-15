@@ -59,7 +59,7 @@ def find_today_log(workspace):
 def scan_log(log_path):
     """Scan a daily log for uncaptured decisions/tasks."""
     signals = []
-    with open(log_path, "r") as f:
+    with open(log_path, "r", encoding="utf-8") as f:
         lines = f.readlines()
 
     for i, line in enumerate(lines, 1):
@@ -92,7 +92,7 @@ def append_signals(workspace, signals, date_str):
 
     # Check existing signals to avoid duplicates
     existing = ""
-    with open(signals_path, "r") as f:
+    with open(signals_path, "r", encoding="utf-8") as f:
         existing = f.read()
 
     new_signals = []
