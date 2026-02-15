@@ -8,3 +8,14 @@ dist/
 *.egg-info/
 .venv*/
 temp_workspace/
+reproduce_*.py
+
+# Benchmark caches and dry-run results
+benchmarks/.cache/
+benchmarks/locomo_results.json
+benchmarks/locomo_judge_results.json
+benchmarks/*.partial
+
+# Workspace artifacts (not part of repo)
+/maintenance/
+/intelligence/

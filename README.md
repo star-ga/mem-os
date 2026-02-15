@@ -95,9 +95,41 @@ Mem-OS recall engine evaluated on two standard long-term memory benchmarks. Zero
 | Multi-hop | 321 | 47.4% | 66.4% | 71.0% | 0.549 |
 | Open-domain | 841 | 38.4% | 62.1% | 70.0% | 0.484 |
 
-**Context:** These are pure retrieval metrics (no LLM judge). Mem0 reports 66.9–68.5% on LoCoMo via LLM-as-judge accuracy (graph variant). Letta's plain-file baseline scored 74.0% with gpt-4o-mini — demonstrating that simple storage + agentic tool use outperforms engineered retrieval pipelines on LoCoMo. Mem-OS's Markdown-file + BM25 approach is architecturally aligned with these high-performing baselines while adding integrity guarantees no other system provides.
+**LoCoMo LLM-as-Judge (retrieve → answer → judge pipeline):**
 
-Run benchmarks yourself: `python3 benchmarks/locomo_harness.py` or `python3 benchmarks/longmemeval_harness.py`
+Same pipeline as Mem0 and Letta evaluations: retrieve context via BM25, generate answer with LLM, score against gold reference with judge LLM. Directly comparable methodology.
+
+| Category | N | Accuracy (≥50) | Mean Score | Min | Max |
+|---|---|---|---|---|---|
+| **Overall** | **304** | **36.5%** | **30.7** | 0 | 100 |
+| Open-domain | 114 | 58.8% | 51.8 | 0 | 100 |
+| Single-hop | 43 | 44.2% | 34.4 | 0 | 100 |
+| Multi-hop | 63 | 22.2% | 16.0 | 0 | 100 |
+| Temporal | 13 | 23.1% | 23.1 | 0 | 100 |
+| Adversarial | 71 | 11.3% | 9.2 | 0 | 100 |
+
+> **Judge model:** `mistral-small-latest` (answerer + judge). Mem0 (68.5%) and Letta (74.0%) report scores using `gpt-4o-mini` as judge — a significantly stronger model. Judge quality directly impacts scores: stronger judges score more consistently and generously. Results with `gpt-4o-mini` judge are in progress for direct comparison.
+
+**How the comparison works:**
+
+| System | LoCoMo Score | Judge Model | Approach |
+|---|---|---|---|
+| **Mem0** (graph) | 68.5% | gpt-4o-mini | Graph memory + LLM extraction |
+| **Letta** (files) | 74.0% | gpt-4o-mini | Plain files + agent tool use |
+| **Mem-OS** (BM25) | 36.5%* | mistral-small | BM25 recall + Markdown files |
+
+*\*With weaker judge model. gpt-4o-mini results pending for apples-to-apples comparison.*
+
+Run benchmarks yourself:
+```bash
+# Retrieval-only (R@K metrics)
+python3 benchmarks/locomo_harness.py
+python3 benchmarks/longmemeval_harness.py
+
+# LLM-as-judge (accuracy metrics, requires API key)
+python3 benchmarks/locomo_judge.py --dry-run
+python3 benchmarks/locomo_judge.py --answerer-model mistral-small-latest --output results.json
+```
 
 ### Persistent Memory
 Structured, validated, append-only decisions / tasks / entities / incidents with provenance and supersede chains.
@@ -273,7 +305,7 @@ $ bash maintenance/validate.sh .
 TOTAL: 74 checks | 74 passed | 0 issues | 1 warnings
 ```
 
-> Note: validate.sh check count scales with data — fresh workspaces have 74 checks, populated workspaces have more. The 1 warning is expected (no weekly summaries yet). Additionally, 316 pytest unit tests cover all core modules.
+> Note: validate.sh check count scales with data — fresh workspaces have 74 checks, populated workspaces have more. The 1 warning is expected (no weekly summaries yet). Additionally, 369 pytest unit tests cover all core modules.
 
 ---
 

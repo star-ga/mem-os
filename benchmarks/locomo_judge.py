@@ -1,0 +1,577 @@
+#!/usr/bin/env python3
+"""LoCoMo LLM-as-Judge Evaluation for Mem-OS.
+
+Extends the retrieval harness with an LLM judge pipeline:
+  1. Retrieve top-K blocks via mem-os BM25 recall
+  2. Feed retrieved context + question to an answerer LLM
+  3. Judge scores the generated answer against gold reference
+
+Produces accuracy scores directly comparable to Mem0's reported
+66.9-68.5% and Letta's 74.0% on LoCoMo.
+
+Usage:
+    python3 benchmarks/locomo_judge.py --dry-run
+    python3 benchmarks/locomo_judge.py --judge-model mistral-small-latest --top-k 10
+    python3 benchmarks/locomo_judge.py --answerer-model mistral-small-latest --output results.json
+
+Environment:
+    MISTRAL_API_KEY — Required for Mistral models (default)
+    OPENAI_API_KEY — Required for OpenAI models
+    Keys auto-loaded from ~/.claude-ultimate/.env if present
+
+Reference: Mem0 eval, Letta blog (Aug 2025), memobase LoCoMo fork.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import sys
+import time
+import urllib.request
+import urllib.error
+
+# Add scripts/ and benchmarks/ to path
+_HERE = os.path.dirname(os.path.abspath(__file__))
+_SCRIPTS_DIR = os.path.join(_HERE, "..", "scripts")
+sys.path.insert(0, _SCRIPTS_DIR)
+sys.path.insert(0, _HERE)
+
+from recall import recall  # noqa: E402
+from locomo_harness import (  # noqa: E402
+    download_dataset,
+    build_workspace,
+    _parse_sessions,
+    CATEGORY_NAMES,
+)
+
+# ---------------------------------------------------------------------------
+# Load API keys from .env
+# ---------------------------------------------------------------------------
+
+def _load_env():
+    """Load API keys from ~/.claude-ultimate/.env if not already set."""
+    env_path = os.path.expanduser("~/.claude-ultimate/.env")
+    if os.path.isfile(env_path):
+        with open(env_path, "r") as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    key, _, val = line.partition("=")
+                    if key.strip() and not os.environ.get(key.strip()):
+                        os.environ[key.strip()] = val.strip()
+
+_load_env()
+
+
+# ---------------------------------------------------------------------------
+# LLM API calls (OpenAI-compatible)
+# ---------------------------------------------------------------------------
+
+# Provider routing: model prefix determines API endpoint
+PROVIDER_CONFIG = {
+    "gpt": {
+        "base_url": "https://api.openai.com/v1/chat/completions",
+        "key_env": "OPENAI_API_KEY",
+    },
+    "mistral": {
+        "base_url": "https://api.mistral.ai/v1/chat/completions",
+        "key_env": "MISTRAL_API_KEY",
+    },
+    "ministral": {
+        "base_url": "https://api.mistral.ai/v1/chat/completions",
+        "key_env": "MISTRAL_API_KEY",
+    },
+}
+
+
+def _resolve_provider(model: str) -> tuple[str, str]:
+    """Resolve API base URL and key from model name prefix."""
+    for prefix, cfg in PROVIDER_CONFIG.items():
+        if model.startswith(prefix):
+            key = os.environ.get(cfg["key_env"], "")
+            if not key:
+                raise RuntimeError(f"{cfg['key_env']} not set for model {model}")
+            return cfg["base_url"], key
+    raise RuntimeError(f"Unknown model provider for: {model}")
+
+
+def _llm_chat(
+    messages: list[dict],
+    model: str = "mistral-small-latest",
+    temperature: float = 0.0,
+    max_tokens: int = 512,
+    max_retries: int = 3,
+) -> str:
+    """Call LLM chat completions API (OpenAI-compatible). Returns content.
+
+    Retries on transient errors (429, 5xx, timeouts) with exponential backoff.
+    """
+    base_url, api_key = _resolve_provider(model)
+
+    payload = {
+        "model": model,
+        "messages": messages,
+        "temperature": temperature,
+        "max_tokens": max_tokens,
+    }
+
+    data = json.dumps(payload).encode("utf-8")
+
+    for attempt in range(max_retries):
+        try:
+            req = urllib.request.Request(
+                base_url,
+                data=data,
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {api_key}",
+                },
+            )
+            with urllib.request.urlopen(req, timeout=120) as resp:
+                result = json.loads(resp.read().decode("utf-8"))
+            return result["choices"][0]["message"]["content"].strip()
+        except urllib.error.HTTPError as e:
+            if e.code in (429, 500, 502, 503, 504) and attempt < max_retries - 1:
+                wait = 2 ** (attempt + 1)
+                print(f"  [retry] HTTP {e.code}, waiting {wait}s...")
+                time.sleep(wait)
+                continue
+            raise
+        except (urllib.error.URLError, TimeoutError, OSError) as e:
+            if attempt < max_retries - 1:
+                wait = 2 ** (attempt + 1)
+                print(f"  [retry] {type(e).__name__}, waiting {wait}s...")
+                time.sleep(wait)
+                continue
+            raise
+
+
+# ---------------------------------------------------------------------------
+# Prompts (adapted from Mem0/memobase eval pipelines)
+# ---------------------------------------------------------------------------
+
+ANSWER_SYSTEM_PROMPT = """\
+You are a helpful assistant that answers questions based on the provided conversation context.
+Use ONLY the information in the context to answer. If the context doesn't contain enough
+information, say "I don't have enough information to answer this question."
+Be concise and factual."""
+
+ANSWER_USER_TEMPLATE = """\
+Context from conversation memory:
+{context}
+
+Question: {question}
+
+Answer the question based on the context above. Be concise and specific."""
+
+JUDGE_SYSTEM_PROMPT = """\
+You are an expert judge evaluating the quality of answers about conversations.
+Score the generated answer by comparing it to the reference answer.
+Consider factual accuracy, completeness, and relevance.
+Output ONLY a JSON object with two fields:
+- "score": integer 0-100 (0=completely wrong, 100=perfect match)
+- "reason": brief explanation (1 sentence)"""
+
+JUDGE_USER_TEMPLATE = """\
+Question: {question}
+
+Reference Answer: {reference}
+
+Generated Answer: {generated}
+
+Score the generated answer against the reference. Output JSON only."""
+
+ADVERSARIAL_ANSWER_PROMPT = """\
+Context from conversation memory:
+{context}
+
+Question: {question}
+
+IMPORTANT: Answer based ONLY on facts in the context.
+If the question makes assumptions not supported by the context, point that out.
+Be concise and factual."""
+
+
+# ---------------------------------------------------------------------------
+# Evaluation pipeline
+# ---------------------------------------------------------------------------
+
+def format_context(retrieved: list[dict], max_chars: int = 6000) -> str:
+    """Format retrieved blocks into context string for the LLM.
+
+    Recall results use 'excerpt' for the text content.
+    """
+    parts = []
+    total = 0
+    for r in retrieved:
+        # Recall engine returns 'excerpt' field with block content
+        text = r.get("excerpt", "") or r.get("Statement", "")
+        if not text:
+            continue
+        part = text.strip()
+        if total + len(part) > max_chars:
+            break
+        parts.append(part)
+        total += len(part)
+    return "\n".join(parts)
+
+
+def answer_question(
+    question: str,
+    context: str,
+    is_adversarial: bool,
+    model: str = "mistral-small-latest",
+) -> str:
+    """Generate an answer using the LLM given retrieved context."""
+    if is_adversarial:
+        user_msg = ADVERSARIAL_ANSWER_PROMPT.format(
+            context=context, question=question
+        )
+    else:
+        user_msg = ANSWER_USER_TEMPLATE.format(
+            context=context, question=question
+        )
+
+    messages = [
+        {"role": "system", "content": ANSWER_SYSTEM_PROMPT},
+        {"role": "user", "content": user_msg},
+    ]
+    return _llm_chat(messages, model=model)
+
+
+def judge_answer(
+    question: str,
+    reference: str,
+    generated: str,
+    model: str = "mistral-small-latest",
+) -> dict:
+    """Have the judge LLM score the generated answer. Returns {score, reason}."""
+    user_msg = JUDGE_USER_TEMPLATE.format(
+        question=question,
+        reference=reference,
+        generated=generated,
+    )
+
+    messages = [
+        {"role": "system", "content": JUDGE_SYSTEM_PROMPT},
+        {"role": "user", "content": user_msg},
+    ]
+
+    raw = _llm_chat(messages, model=model, max_tokens=200)
+
+    # Parse JSON from response
+    try:
+        # Handle markdown code blocks
+        if "```" in raw:
+            raw = raw.split("```")[1]
+            if raw.startswith("json"):
+                raw = raw[4:]
+        result = json.loads(raw.strip())
+        return {
+            "score": int(result.get("score", 0)),
+            "reason": str(result.get("reason", "")),
+        }
+    except (json.JSONDecodeError, ValueError, IndexError):
+        # Fallback: try to extract score from text
+        import re
+        m = re.search(r'"score"\s*:\s*(\d+)', raw)
+        if m:
+            return {"score": int(m.group(1)), "reason": raw[:200]}
+        return {"score": 0, "reason": f"Parse error: {raw[:200]}"}
+
+
+def evaluate_sample_with_judge(
+    sample: dict,
+    workspace: str,
+    top_k: int = 10,
+    answerer_model: str = "mistral-small-latest",
+    judge_model: str = "mistral-small-latest",
+    rate_limit_delay: float = 0.1,
+) -> list[dict]:
+    """Run LLM-as-judge evaluation for one LoCoMo sample.
+
+    For each QA pair:
+    1. Retrieve top-K blocks via BM25 recall
+    2. Generate answer using answerer LLM
+    3. Score answer using judge LLM
+    """
+    qa_pairs = sample.get("qa", [])
+    results = []
+
+    for qi, qa in enumerate(qa_pairs):
+        question = qa.get("question", "")
+        cat_raw = qa.get("category", 0)
+        category = CATEGORY_NAMES.get(cat_raw, f"cat-{cat_raw}")
+        is_adversarial = cat_raw == 5
+
+        # Gold answer
+        if is_adversarial:
+            gold_answer = qa.get("adversarial_answer", qa.get("answer", ""))
+        else:
+            gold_answer = qa.get("answer", "")
+
+        if not question:
+            continue
+
+        # Step 1: Retrieve
+        retrieved = recall(workspace, question, limit=top_k, active_only=False)
+        context = format_context(retrieved)
+
+        # Step 2: Answer
+        try:
+            generated = answer_question(
+                question, context, is_adversarial, model=answerer_model
+            )
+        except Exception as e:
+            generated = f"Error: {e}"
+
+        # Step 3: Judge
+        try:
+            judgment = judge_answer(
+                question, gold_answer, generated, model=judge_model
+            )
+        except Exception as e:
+            judgment = {"score": 0, "reason": f"Judge error: {e}"}
+
+        results.append({
+            "question": question,
+            "category": category,
+            "gold_answer": gold_answer,
+            "generated_answer": generated,
+            "context_blocks": len(retrieved),
+            "judge_score": judgment["score"],
+            "judge_reason": judgment["reason"],
+        })
+
+        # Rate limiting
+        if rate_limit_delay > 0:
+            time.sleep(rate_limit_delay)
+
+    return results
+
+
+def aggregate_judge_metrics(all_results: list[dict]) -> dict:
+    """Compute aggregate LLM-as-judge metrics."""
+    if not all_results:
+        return {"error": "no results"}
+
+    # Group by category
+    by_category = {}
+    for r in all_results:
+        cat = r["category"]
+        if cat not in by_category:
+            by_category[cat] = []
+        by_category[cat].append(r)
+
+    def compute_group(group: list[dict]) -> dict:
+        n = len(group)
+        scores = [r["judge_score"] for r in group]
+        avg = sum(scores) / n if n else 0
+        # Accuracy = % of questions scored >= 50
+        accurate = sum(1 for s in scores if s >= 50) / n if n else 0
+        # High accuracy = % scored >= 75
+        high_acc = sum(1 for s in scores if s >= 75) / n if n else 0
+        return {
+            "count": n,
+            "mean_score": round(avg, 2),
+            "accuracy_50": round(accurate * 100, 2),
+            "accuracy_75": round(high_acc * 100, 2),
+            "min_score": min(scores) if scores else 0,
+            "max_score": max(scores) if scores else 0,
+        }
+
+    metrics = {
+        "overall": compute_group(all_results),
+        "by_category": {},
+    }
+    for cat, group in sorted(by_category.items()):
+        metrics["by_category"][cat] = compute_group(group)
+
+    return metrics
+
+
+def print_judge_table(metrics: dict) -> None:
+    """Print formatted LLM-as-judge results table."""
+    print()
+    print("=" * 80)
+    print("LoCoMo LLM-as-Judge Results — Mem-OS + BM25 Recall")
+    print("=" * 80)
+
+    header = (
+        f"{'Category':<20} {'N':>5} {'Mean':>7} "
+        f"{'Acc≥50':>8} {'Acc≥75':>8} {'Min':>5} {'Max':>5}"
+    )
+    print(header)
+    print("-" * 80)
+
+    overall = metrics.get("overall", {})
+    print(
+        f"{'OVERALL':<20} {overall.get('count', 0):>5} "
+        f"{overall.get('mean_score', 0):>7.1f} "
+        f"{overall.get('accuracy_50', 0):>7.1f}% "
+        f"{overall.get('accuracy_75', 0):>7.1f}% "
+        f"{overall.get('min_score', 0):>5} "
+        f"{overall.get('max_score', 0):>5}"
+    )
+    print("-" * 80)
+
+    for cat, cm in sorted(metrics.get("by_category", {}).items()):
+        print(
+            f"{cat:<20} {cm.get('count', 0):>5} "
+            f"{cm.get('mean_score', 0):>7.1f} "
+            f"{cm.get('accuracy_50', 0):>7.1f}% "
+            f"{cm.get('accuracy_75', 0):>7.1f}% "
+            f"{cm.get('min_score', 0):>5} "
+            f"{cm.get('max_score', 0):>5}"
+        )
+
+    print("=" * 80)
+    print()
+
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="LoCoMo LLM-as-Judge Evaluation for Mem-OS"
+    )
+    parser.add_argument(
+        "--dry-run", action="store_true",
+        help="Test with only the first conversation",
+    )
+    parser.add_argument(
+        "--top-k", type=int, default=10,
+        help="Number of blocks to retrieve per question (default: 10)",
+    )
+    parser.add_argument(
+        "--answerer-model", type=str, default="mistral-small-latest",
+        help="Model for generating answers (default: mistral-small-latest)",
+    )
+    parser.add_argument(
+        "--judge-model", type=str, default="mistral-small-latest",
+        help="Model for judging answers (default: mistral-small-latest)",
+    )
+    parser.add_argument(
+        "--rate-limit", type=float, default=0.05,
+        help="Delay between API calls in seconds (default: 0.05)",
+    )
+    parser.add_argument(
+        "--output", "-o", type=str, default=None,
+        help="Write JSON results to this file",
+    )
+    parser.add_argument(
+        "--limit", type=int, default=None,
+        help="Limit number of QA pairs per conversation (for testing)",
+    )
+    args = parser.parse_args()
+
+    # Load dataset
+    dataset = download_dataset()
+    if args.dry_run:
+        dataset = dataset[:1]
+        print(f"[judge] Dry-run mode: 1 conversation")
+
+    print(f"[judge] Config: answerer={args.answerer_model}, "
+          f"judge={args.judge_model}, top_k={args.top_k}")
+
+    import tempfile
+    import shutil
+
+    tmp_base = tempfile.mkdtemp(prefix="locomo_judge_")
+    all_results = []
+
+    out_path = args.output or os.path.join(_HERE, "locomo_judge_results.json")
+
+    try:
+        t0 = time.time()
+
+        for i, sample in enumerate(dataset):
+            sample_id = sample.get("sample_id", i)
+            qa_count = len(sample.get("qa", []))
+            if args.limit:
+                sample["qa"] = sample["qa"][:args.limit]
+                qa_count = len(sample["qa"])
+
+            print(f"[judge] [{i+1}/{len(dataset)}] sample={sample_id} "
+                  f"qa_pairs={qa_count}")
+
+            try:
+                workspace = build_workspace(sample, tmp_base)
+
+                sample_results = evaluate_sample_with_judge(
+                    sample, workspace,
+                    top_k=args.top_k,
+                    answerer_model=args.answerer_model,
+                    judge_model=args.judge_model,
+                    rate_limit_delay=args.rate_limit,
+                )
+                all_results.extend(sample_results)
+
+                # Progress
+                if sample_results:
+                    avg = sum(r["judge_score"] for r in sample_results) / len(sample_results)
+                    print(f"         avg_score={avg:.1f}")
+            except Exception as e:
+                print(f"  [ERROR] sample {sample_id} failed: {e}")
+                continue
+
+            # Save partial results after each conversation
+            if all_results:
+                partial = {
+                    "benchmark": "locomo-llm-judge",
+                    "engine": "mem-os-recall-bm25",
+                    "partial": True,
+                    "conversations_done": i + 1,
+                    "num_questions": len(all_results),
+                    "metrics": aggregate_judge_metrics(all_results),
+                    "per_question": all_results,
+                }
+                with open(out_path + ".partial", "w") as f:
+                    json.dump(partial, f, indent=2)
+
+        elapsed = time.time() - t0
+
+        # Aggregate
+        metrics = aggregate_judge_metrics(all_results)
+        print_judge_table(metrics)
+
+        print(f"Total questions: {len(all_results)}")
+        print(f"Elapsed time: {elapsed:.1f}s")
+        api_calls = len(all_results) * 2  # answerer + judge per question
+        print(f"API calls: {api_calls}")
+
+        # Save results
+        output_data = {
+            "benchmark": "locomo-llm-judge",
+            "engine": "mem-os-recall-bm25",
+            "answerer_model": args.answerer_model,
+            "judge_model": args.judge_model,
+            "top_k": args.top_k,
+            "dry_run": args.dry_run,
+            "num_conversations": len(dataset),
+            "num_questions": len(all_results),
+            "elapsed_seconds": round(elapsed, 2),
+            "api_calls": api_calls,
+            "metrics": metrics,
+            "per_question": all_results,
+        }
+
+        with open(out_path, "w", encoding="utf-8") as f:
+            json.dump(output_data, f, indent=2)
+        print(f"Results written to {out_path}")
+
+        # Clean up partial file
+        partial_path = out_path + ".partial"
+        if os.path.exists(partial_path):
+            os.remove(partial_path)
+
+    finally:
+        shutil.rmtree(tmp_base, ignore_errors=True)
+
+
+if __name__ == "__main__":
+    main()
