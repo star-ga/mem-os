@@ -101,12 +101,12 @@ Same pipeline as Mem0 and Letta evaluations: retrieve context via BM25, generate
 
 | Category | N | Accuracy (≥50) | Mean Score | Min | Max |
 |---|---|---|---|---|---|
-| **Overall** | **304** | **36.5%** | **30.7** | 0 | 100 |
-| Open-domain | 114 | 58.8% | 51.8 | 0 | 100 |
-| Single-hop | 43 | 44.2% | 34.4 | 0 | 100 |
-| Multi-hop | 63 | 22.2% | 16.0 | 0 | 100 |
-| Temporal | 13 | 23.1% | 23.1 | 0 | 100 |
-| Adversarial | 71 | 11.3% | 9.2 | 0 | 100 |
+| **Overall** | **1986** | **38.4%** | **31.8** | 0 | 100 |
+| Open-domain | 841 | 56.8% | 49.2 | 0 | 100 |
+| Single-hop | 282 | 44.7% | 34.2 | 0 | 100 |
+| Multi-hop | 321 | 28.0% | 19.6 | 0 | 80 |
+| Temporal | 96 | 27.1% | 23.6 | 0 | 80 |
+| Adversarial | 446 | 9.6% | 7.8 | 0 | 80 |
 
 > **Judge model:** `mistral-small-latest` (answerer + judge). Mem0 (68.5%) and Letta (74.0%) report scores using `gpt-4o-mini` as judge — a significantly stronger model. Judge quality directly impacts scores: stronger judges score more consistently and generously. Results with `gpt-4o-mini` judge are in progress for direct comparison.
 
@@ -116,7 +116,7 @@ Same pipeline as Mem0 and Letta evaluations: retrieve context via BM25, generate
 |---|---|---|---|
 | **Mem0** (graph) | 68.5% | gpt-4o-mini | Graph memory + LLM extraction |
 | **Letta** (files) | 74.0% | gpt-4o-mini | Plain files + agent tool use |
-| **Mem-OS** (BM25) | 36.5%* | mistral-small | BM25 recall + Markdown files |
+| **Mem-OS** (BM25) | 38.4%* | mistral-small | BM25 recall + Markdown files |
 
 *\*With weaker judge model. gpt-4o-mini results pending for apples-to-apples comparison.*
 

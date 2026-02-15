@@ -38,13 +38,40 @@ _SCRIPTS_DIR = os.path.join(_HERE, "..", "scripts")
 sys.path.insert(0, _SCRIPTS_DIR)
 sys.path.insert(0, _HERE)
 
-from recall import recall  # noqa: E402
-from locomo_harness import (  # noqa: E402
-    download_dataset,
-    build_workspace,
-    _parse_sessions,
-    CATEGORY_NAMES,
-)
+# Heavy imports (recall engine, harness) are deferred to avoid loading them
+# in the orchestrator process, which only needs json/subprocess/time.
+# They are loaded on-demand in _run_single_conv() and evaluate functions.
+recall = None
+download_dataset = None
+build_workspace = None
+_parse_sessions = None
+CATEGORY_NAMES = {}
+
+
+def _load_heavy_imports():
+    """Load recall engine and harness modules. Called only in subprocess mode."""
+    global recall, download_dataset, build_workspace, _parse_sessions, CATEGORY_NAMES
+
+    from recall import recall as _recall  # noqa: E402
+    recall = _recall
+
+    # Suppress recall structured logging — observability module's handle()
+    # bypasses level checks, so we remove handlers from the recall logger.
+    import logging as _logging
+    for _name in list(_logging.Logger.manager.loggerDict):
+        if _name.startswith("mem-os."):
+            _logging.getLogger(_name).handlers.clear()
+
+    from locomo_harness import (  # noqa: E402
+        download_dataset as _dd,
+        build_workspace as _bw,
+        _parse_sessions as _ps,
+        CATEGORY_NAMES as _cn,
+    )
+    download_dataset = _dd
+    build_workspace = _bw
+    _parse_sessions = _ps
+    CATEGORY_NAMES = _cn
 
 # ---------------------------------------------------------------------------
 # Load API keys from .env
@@ -352,6 +379,34 @@ def evaluate_sample_with_judge(
     return results
 
 
+def _compute_metrics_from_scores(score_agg: dict[str, list[int]]) -> dict:
+    """Compute metrics from {category: [scores]} dict. Memory-efficient."""
+    def _group_stats(scores):
+        n = len(scores)
+        if not n:
+            return {"count": 0, "mean_score": 0, "accuracy_50": 0, "accuracy_75": 0, "min_score": 0, "max_score": 0}
+        avg = sum(scores) / n
+        acc50 = sum(1 for s in scores if s >= 50) / n
+        acc75 = sum(1 for s in scores if s >= 75) / n
+        return {
+            "count": n,
+            "mean_score": round(avg, 2),
+            "accuracy_50": round(acc50 * 100, 2),
+            "accuracy_75": round(acc75 * 100, 2),
+            "min_score": min(scores),
+            "max_score": max(scores),
+        }
+
+    all_scores = []
+    for cat_scores in score_agg.values():
+        all_scores.extend(cat_scores)
+
+    return {
+        "overall": _group_stats(all_scores),
+        "by_category": {cat: _group_stats(scores) for cat, scores in sorted(score_agg.items())},
+    }
+
+
 def aggregate_judge_metrics(all_results: list[dict]) -> dict:
     """Compute aggregate LLM-as-judge metrics."""
     if not all_results:
@@ -435,6 +490,64 @@ def print_judge_table(metrics: dict) -> None:
 # Main
 # ---------------------------------------------------------------------------
 
+def _run_single_conv(conv_index: int, args) -> None:
+    """Process a single conversation in-process, write results to JSONL.
+
+    Called either directly (--single-conv) or via subprocess from orchestrator.
+    Loads only the needed conversation, processes it, writes JSONL, exits.
+    """
+    import tempfile
+    import shutil
+
+    _load_heavy_imports()
+    dataset = download_dataset()
+    if conv_index >= len(dataset):
+        print(f"[judge] conv_index {conv_index} >= dataset size {len(dataset)}")
+        return
+
+    sample = dataset[conv_index]
+    # Free the rest of the dataset immediately
+    del dataset
+
+    sample_id = sample.get("sample_id", conv_index)
+    qa_count = len(sample.get("qa", []))
+    if args.limit:
+        sample["qa"] = sample["qa"][:args.limit]
+        qa_count = len(sample["qa"])
+
+    print(f"[judge] conv={conv_index} sample={sample_id} qa_pairs={qa_count}")
+
+    out_path = args.output or os.path.join(_HERE, "locomo_judge_results.json")
+    jsonl_path = out_path + f".conv{conv_index}.jsonl"
+
+    conv_tmp = tempfile.mkdtemp(prefix=f"lj_{sample_id}_")
+    try:
+        workspace = build_workspace(sample, conv_tmp)
+
+        results = evaluate_sample_with_judge(
+            sample, workspace,
+            top_k=args.top_k,
+            answerer_model=args.answerer_model,
+            judge_model=args.judge_model,
+            rate_limit_delay=args.rate_limit,
+        )
+
+        with open(jsonl_path, "w") as f:
+            for r in results:
+                f.write(json.dumps(r) + "\n")
+
+        if results:
+            avg = sum(r["judge_score"] for r in results) / len(results)
+            print(f"[judge] conv={conv_index} done: {len(results)} qa, avg={avg:.1f}")
+        else:
+            print(f"[judge] conv={conv_index} done: 0 qa")
+
+    except Exception as e:
+        print(f"[judge] conv={conv_index} ERROR: {e}")
+    finally:
+        shutil.rmtree(conv_tmp, ignore_errors=True)
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="LoCoMo LLM-as-Judge Evaluation for Mem-OS"
@@ -467,110 +580,142 @@ def main():
         "--limit", type=int, default=None,
         help="Limit number of QA pairs per conversation (for testing)",
     )
+    parser.add_argument(
+        "--single-conv", type=int, default=None,
+        help="Process only this conversation index (used by subprocess orchestration)",
+    )
     args = parser.parse_args()
 
-    # Load dataset
-    dataset = download_dataset()
-    if args.dry_run:
-        dataset = dataset[:1]
-        print(f"[judge] Dry-run mode: 1 conversation")
+    # Single-conversation mode: process one conv and exit
+    if args.single_conv is not None:
+        _run_single_conv(args.single_conv, args)
+        return
 
-    print(f"[judge] Config: answerer={args.answerer_model}, "
-          f"judge={args.judge_model}, top_k={args.top_k}")
+    # --- Orchestrator mode: spawn subprocesses per conversation ---
+    # The orchestrator never loads the dataset itself — each conversation
+    # runs in a separate subprocess to stay under cgroup memory limits.
+    import subprocess as sp
 
-    import tempfile
-    import shutil
-
-    tmp_base = tempfile.mkdtemp(prefix="locomo_judge_")
-    all_results = []
+    # LoCoMo10 has exactly 10 conversations. Ensure cache exists via subprocess.
+    cache_file = os.path.join(_HERE, ".cache", "locomo10.json")
+    if not os.path.isfile(cache_file):
+        sp.run([sys.executable, "-c",
+                "import sys,os; sys.path.insert(0, os.path.join("
+                f"{_HERE!r}, '..', 'scripts')); sys.path.insert(0, {_HERE!r}); "
+                "from locomo_harness import download_dataset; download_dataset()"],
+               timeout=120)
+    num_convs = 1 if args.dry_run else 10
 
     out_path = args.output or os.path.join(_HERE, "locomo_judge_results.json")
 
-    try:
-        t0 = time.time()
+    print(f"[judge] Config: answerer={args.answerer_model}, "
+          f"judge={args.judge_model}, top_k={args.top_k}")
+    print(f"[judge] Orchestrator: {num_convs} conversations (subprocess per conv)")
 
-        for i, sample in enumerate(dataset):
-            sample_id = sample.get("sample_id", i)
-            qa_count = len(sample.get("qa", []))
-            if args.limit:
-                sample["qa"] = sample["qa"][:args.limit]
-                qa_count = len(sample["qa"])
+    t0 = time.time()
+    score_agg = {}
+    total_questions = 0
 
-            print(f"[judge] [{i+1}/{len(dataset)}] sample={sample_id} "
-                  f"qa_pairs={qa_count}")
+    for ci in range(num_convs):
+        # Build subprocess command
+        cmd = [
+            sys.executable, os.path.abspath(__file__),
+            "--single-conv", str(ci),
+            "--top-k", str(args.top_k),
+            "--answerer-model", args.answerer_model,
+            "--judge-model", args.judge_model,
+            "--rate-limit", str(args.rate_limit),
+            "--output", out_path,
+        ]
+        if args.limit:
+            cmd.extend(["--limit", str(args.limit)])
 
-            try:
-                workspace = build_workspace(sample, tmp_base)
+        print(f"\n[judge] [{ci+1}/{num_convs}] Launching subprocess for conv {ci}...")
+        result = sp.run(cmd, capture_output=False, timeout=1800)
 
-                sample_results = evaluate_sample_with_judge(
-                    sample, workspace,
-                    top_k=args.top_k,
-                    answerer_model=args.answerer_model,
-                    judge_model=args.judge_model,
-                    rate_limit_delay=args.rate_limit,
-                )
-                all_results.extend(sample_results)
+        if result.returncode != 0:
+            print(f"[judge] WARNING: conv {ci} subprocess exited with code {result.returncode}")
 
-                # Progress
-                if sample_results:
-                    avg = sum(r["judge_score"] for r in sample_results) / len(sample_results)
-                    print(f"         avg_score={avg:.1f}")
-            except Exception as e:
-                print(f"  [ERROR] sample {sample_id} failed: {e}")
-                continue
+        # Read the subprocess's JSONL output
+        jsonl_path = out_path + f".conv{ci}.jsonl"
+        if os.path.isfile(jsonl_path):
+            with open(jsonl_path, "r") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    r = json.loads(line)
+                    cat = r["category"]
+                    if cat not in score_agg:
+                        score_agg[cat] = []
+                    score_agg[cat].append(r["judge_score"])
+                    total_questions += 1
 
-            # Save partial results after each conversation
-            if all_results:
+            # Save partial metrics after each conversation
+            if score_agg:
+                partial_metrics = _compute_metrics_from_scores(score_agg)
                 partial = {
                     "benchmark": "locomo-llm-judge",
                     "engine": "mem-os-recall-bm25",
                     "partial": True,
-                    "conversations_done": i + 1,
-                    "num_questions": len(all_results),
-                    "metrics": aggregate_judge_metrics(all_results),
-                    "per_question": all_results,
+                    "conversations_done": ci + 1,
+                    "num_questions": total_questions,
+                    "metrics": partial_metrics,
                 }
                 with open(out_path + ".partial", "w") as f:
                     json.dump(partial, f, indent=2)
+        else:
+            print(f"[judge] WARNING: no JSONL output for conv {ci}")
 
-        elapsed = time.time() - t0
+    elapsed = time.time() - t0
 
-        # Aggregate
-        metrics = aggregate_judge_metrics(all_results)
-        print_judge_table(metrics)
+    # Final aggregation
+    metrics = _compute_metrics_from_scores(score_agg)
+    print_judge_table(metrics)
 
-        print(f"Total questions: {len(all_results)}")
-        print(f"Elapsed time: {elapsed:.1f}s")
-        api_calls = len(all_results) * 2  # answerer + judge per question
-        print(f"API calls: {api_calls}")
+    print(f"Total questions: {total_questions}")
+    print(f"Elapsed time: {elapsed:.1f}s")
+    api_calls = total_questions * 2
+    print(f"API calls: {api_calls}")
 
-        # Save results
-        output_data = {
-            "benchmark": "locomo-llm-judge",
-            "engine": "mem-os-recall-bm25",
-            "answerer_model": args.answerer_model,
-            "judge_model": args.judge_model,
-            "top_k": args.top_k,
-            "dry_run": args.dry_run,
-            "num_conversations": len(dataset),
-            "num_questions": len(all_results),
-            "elapsed_seconds": round(elapsed, 2),
-            "api_calls": api_calls,
-            "metrics": metrics,
-            "per_question": all_results,
-        }
+    # Merge all per-conv JSONL files into final output
+    per_question = []
+    for ci in range(num_convs):
+        jsonl_path = out_path + f".conv{ci}.jsonl"
+        if os.path.isfile(jsonl_path):
+            with open(jsonl_path, "r") as f:
+                for line in f:
+                    line = line.strip()
+                    if line:
+                        per_question.append(json.loads(line))
 
-        with open(out_path, "w", encoding="utf-8") as f:
-            json.dump(output_data, f, indent=2)
-        print(f"Results written to {out_path}")
+    output_data = {
+        "benchmark": "locomo-llm-judge",
+        "engine": "mem-os-recall-bm25",
+        "answerer_model": args.answerer_model,
+        "judge_model": args.judge_model,
+        "top_k": args.top_k,
+        "dry_run": args.dry_run,
+        "num_conversations": num_convs,
+        "num_questions": total_questions,
+        "elapsed_seconds": round(elapsed, 2),
+        "api_calls": api_calls,
+        "metrics": metrics,
+        "per_question": per_question,
+    }
 
-        # Clean up partial file
-        partial_path = out_path + ".partial"
-        if os.path.exists(partial_path):
-            os.remove(partial_path)
+    with open(out_path, "w", encoding="utf-8") as f:
+        json.dump(output_data, f, indent=2)
+    print(f"\nResults written to {out_path}")
 
-    finally:
-        shutil.rmtree(tmp_base, ignore_errors=True)
+    # Clean up per-conv JSONL and partial files
+    for ci in range(num_convs):
+        jsonl_path = out_path + f".conv{ci}.jsonl"
+        if os.path.exists(jsonl_path):
+            os.remove(jsonl_path)
+    partial_path = out_path + ".partial"
+    if os.path.exists(partial_path):
+        os.remove(partial_path)
 
 
 if __name__ == "__main__":
