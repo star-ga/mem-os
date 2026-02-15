@@ -60,6 +60,7 @@ Value         ::= { AnyChar }                       (* until NewLine *)
 ```ebnf
 DecisionStatus ::= "active" | "superseded" | "revoked"
 TaskStatus     ::= "todo" | "doing" | "done" | "blocked" | "canceled"
+TaskOwner      ::= "user" | "bot"
 SignalStatus   ::= "pending" | "accepted" | "rejected"
 ProposalStatus ::= "staged" | "applied" | "rejected" | "deferred" | "expired" | "rolled_back"
 ```
@@ -302,6 +303,7 @@ These invariants MUST hold at all times. Any operation that would violate them M
 | M4 | Auto-capture writes to SIGNALS only, never to DECISIONS or TASKS | capture.py |
 | M5 | Mode transitions upward require explicit user action | state machine |
 | M6 | Proposals respect budget limits (per_run, per_day, backlog_limit) | intel_scan.py |
+| M7 | Dead decision detection exempts decisions with priority < 7 or enforcement in {invariant, structural} | intel_scan.py |
 
 ### Operational Invariants
 
