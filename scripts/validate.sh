@@ -83,13 +83,18 @@ if [[ -f "$DEC_FILE" ]]; then
     fail "Malformed decision IDs:"; echo "$bad_dec" | while read -r line; do log "    $line"; done
   fi
 
-  # Required fields
+  # Required fields — per-block validation (not global count)
   for field in "Date:" "Status:" "Scope:" "Statement:" "Rationale:" "Supersedes:" "Tags:" "Sources:"; do
-    fc=$(grep -c "^$field" "$DEC_FILE" || true)
-    if [[ "$fc" -ge "$dec_count" ]]; then
-      pass "Decisions: $field present ($fc/$dec_count)"
+    # Use awk to count blocks missing this field
+    missing=$(awk -v f="$field" '
+      /^\[D-[0-9]{8}-[0-9]{3}\]$/ { if (block && !found) m++; block=1; found=0 }
+      block && $0 ~ "^"f { found=1 }
+      END { if (block && !found) m++; print m+0 }
+    ' "$DEC_FILE")
+    if [[ "$missing" -eq 0 ]]; then
+      pass "Decisions: $field present in all $dec_count blocks"
     else
-      fail "Decisions: $field missing in some blocks ($fc/$dec_count)"
+      fail "Decisions: $field missing in $missing/$dec_count blocks"
     fi
   done
 
@@ -136,13 +141,17 @@ if [[ -f "$TASK_FILE" ]]; then
     fail "Malformed task IDs:"; echo "$bad_task" | while read -r line; do log "    $line"; done
   fi
 
-  # Required fields (including Dependencies)
+  # Required fields — per-block validation (not global count)
   for field in "Date:" "Title:" "Status:" "Priority:" "Project:" "Due:" "Owner:" "Context:" "Next:" "Dependencies:" "Sources:" "History:"; do
-    fc=$(grep -c "^$field" "$TASK_FILE" || true)
-    if [[ "$fc" -ge "$task_count" ]]; then
-      pass "Tasks: $field present ($fc/$task_count)"
+    missing=$(awk -v f="$field" '
+      /^\[T-[0-9]{8}-[0-9]{3}\]$/ { if (block && !found) m++; block=1; found=0 }
+      block && $0 ~ "^"f { found=1 }
+      END { if (block && !found) m++; print m+0 }
+    ' "$TASK_FILE")
+    if [[ "$missing" -eq 0 ]]; then
+      pass "Tasks: $field present in all $task_count blocks"
     else
-      fail "Tasks: $field missing in some blocks ($fc/$task_count)"
+      fail "Tasks: $field missing in $missing/$task_count blocks"
     fi
   done
 

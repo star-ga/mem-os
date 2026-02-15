@@ -333,6 +333,48 @@ class TestE2EProposalToApply(unittest.TestCase):
             self.assertEqual(count, 1)
 
 
+class TestProposalIdCollision(unittest.TestCase):
+    """Proposal IDs must not collide across multiple runs."""
+
+    def _scaffold(self, td):
+        os.makedirs(os.path.join(td, "intelligence/proposed"), exist_ok=True)
+        os.makedirs(os.path.join(td, "maintenance"), exist_ok=True)
+        for fname in ("DECISIONS_PROPOSED.md", "TASKS_PROPOSED.md", "EDITS_PROPOSED.md"):
+            with open(os.path.join(td, "intelligence/proposed", fname), "w") as f:
+                f.write(f"# {fname}\n\n")
+        with open(os.path.join(td, "mem-os.json"), "w") as f:
+            json.dump({"mode": "propose", "proposal_budget": {"per_run": 5, "per_day": 10, "backlog_limit": 30}}, f)
+        with open(os.path.join(td, "intelligence/intel-state.json"), "w") as f:
+            json.dump({"mode": "propose", "counters": {}}, f)
+
+    def test_second_run_increments_from_existing(self):
+        """Second run should start IDs after existing proposals."""
+        with tempfile.TemporaryDirectory() as td:
+            self._scaffold(td)
+            c1 = [{
+                "sig1": {"decision": "D-001", "sig": {"id": "CS-1", "priority": 5}},
+                "sig2": {"decision": "D-002", "sig": {"id": "CS-2", "priority": 3}},
+                "severity": "critical", "reason": "test contradiction 1",
+            }]
+            report = IntelReport()
+            generate_proposals(c1, [], td, {"mode": "propose", "counters": {}}, report)
+
+            # Second run with different contradiction
+            c2 = [{
+                "sig1": {"decision": "D-003", "sig": {"id": "CS-3", "priority": 5}},
+                "sig2": {"decision": "D-004", "sig": {"id": "CS-4", "priority": 3}},
+                "severity": "critical", "reason": "test contradiction 2",
+            }]
+            report2 = IntelReport()
+            generate_proposals(c2, [], td, {"mode": "propose", "counters": {}}, report2)
+
+            # Parse all proposals — IDs must be unique
+            blocks = parse_file(os.path.join(td, "intelligence/proposed/EDITS_PROPOSED.md"))
+            proposal_ids = [b["ProposalId"] for b in blocks if b.get("ProposalId")]
+            self.assertEqual(len(proposal_ids), 2, f"Expected 2 proposals, got {len(proposal_ids)}")
+            self.assertEqual(len(set(proposal_ids)), 2, f"Proposal IDs must be unique: {proposal_ids}")
+
+
 class TestProposalRouting(unittest.TestCase):
     """Proposals must route to correct file based on Type field."""
 

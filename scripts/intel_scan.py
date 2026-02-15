@@ -985,6 +985,22 @@ def generate_proposals(contradictions, drift_signals, ws, intel_state, report):
     proposals = []
     proposal_date = datetime.now().strftime("%Y%m%d")
 
+    # Find highest existing proposal index for today to avoid ID collisions
+    existing_max_idx = 0
+    proposed_dir = os.path.join(ws, "intelligence/proposed")
+    if os.path.isdir(proposed_dir):
+        for fname in os.listdir(proposed_dir):
+            fpath = os.path.join(proposed_dir, fname)
+            if os.path.isfile(fpath):
+                with open(fpath, "r") as f:
+                    for line in f:
+                        if line.startswith(f"ProposalId: P-{proposal_date}-"):
+                            try:
+                                idx = int(line.strip().rsplit("-", 1)[1])
+                                existing_max_idx = max(existing_max_idx, idx)
+                            except (ValueError, IndexError):
+                                pass
+
     # Generate proposals from contradictions (supersede the lower-priority one)
     for c in contradictions:
         if len(proposals) >= remaining:
@@ -1005,7 +1021,7 @@ def generate_proposals(contradictions, drift_signals, ws, intel_state, report):
         else:
             continue  # Both candidates are invariants
 
-        pid = f"P-{proposal_date}-{len(proposals)+1:03d}"
+        pid = f"P-{proposal_date}-{existing_max_idx+len(proposals)+1:03d}"
         proposals.append({
             "id": pid,
             "type": "edit",
@@ -1025,7 +1041,7 @@ def generate_proposals(contradictions, drift_signals, ws, intel_state, report):
             for did in s.get("evidence", [])[:2]:
                 if len(proposals) >= remaining:
                     break
-                pid = f"P-{proposal_date}-{len(proposals)+1:03d}"
+                pid = f"P-{proposal_date}-{existing_max_idx+len(proposals)+1:03d}"
                 proposals.append({
                     "id": pid,
                     "type": "edit",
