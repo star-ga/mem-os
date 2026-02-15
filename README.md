@@ -50,6 +50,7 @@ Drop-in memory layer for [OpenClaw](https://github.com/anthropics/claude-code) (
 - [Block Format](#block-format)
 - [Specification](#specification)
 - [Configuration](#configuration)
+- [MCP Server](#mcp-server)
 - [Contributing](#contributing)
 - [License](#license)
 
@@ -115,7 +116,7 @@ Crash-safe writes via journal-based WAL. Full workspace backup (tar.gz), git-fri
 Scans Claude Code / OpenClaw transcript files for user corrections, convention discoveries, bug fix insights, and architectural decisions. 16 transcript-specific patterns with role filtering and confidence classification.
 
 ### 74+ Structural Checks + 302 Unit Tests
-`validate.sh` checks schemas, cross-references, ID formats, status values, supersede chains, ConstraintSignatures, and more. Backed by 302 pytest unit tests covering parser, recall (BM25 + stemming + expansion), capture (structured extraction + confidence), compaction, file locking, observability, namespaces, conflict resolution, WAL/backup, transcript capture, apply, and intel_scan.
+`validate.sh` checks schemas, cross-references, ID formats, status values, supersede chains, ConstraintSignatures, and more. Backed by 316 pytest unit tests covering parser, recall (BM25 + stemming + expansion), capture (structured extraction + confidence), compaction, file locking, observability, namespaces, conflict resolution, WAL/backup, transcript capture, apply, and intel_scan.
 
 ### Audit Trail
 Every applied proposal logged with timestamp, receipt, and DIFF. Full traceability from signal → proposal → decision.
@@ -246,7 +247,7 @@ $ bash maintenance/validate.sh .
 TOTAL: 74 checks | 74 passed | 0 issues | 1 warnings
 ```
 
-> Note: validate.sh check count scales with data — fresh workspaces have 74 checks, populated workspaces have more. The 1 warning is expected (no weekly summaries yet). Additionally, 302 pytest unit tests cover all core modules.
+> Note: validate.sh check count scales with data — fresh workspaces have 74 checks, populated workspaces have more. The 1 warning is expected (no weekly summaries yet). Additionally, 316 pytest unit tests cover all core modules.
 
 ---
 
@@ -264,6 +265,7 @@ TOTAL: 74 checks | 74 passed | 0 issues | 1 warnings
 
 ```
 your-workspace/
+├── mcp_server.py            # MCP server (FastMCP)
 ├── mem-os.json              # Config
 ├── MEMORY.md                # Protocol rules
 │
@@ -359,7 +361,7 @@ Compared against every major memory solution for AI agents (as of 2026):
 | **Integrity & Safety** | | | | | | | | | |
 | Contradiction detection | No | No | No | No | No | No | No | No | **Yes (ConstraintSignatures)** |
 | Drift analysis | No | No | No | No | No | No | No | No | **Yes (dead decisions, orphans)** |
-| Structural validation | No | No | No | No | No | No | No | No | **74+ checks + 302 tests** |
+| Structural validation | No | No | No | No | No | No | No | No | **74+ checks + 316 tests** |
 | Impact graph | No | No | No | No | No | No | No | No | **Yes (decision → task/entity)** |
 | Coverage scoring | No | No | No | No | No | No | No | No | **Yes (% decisions enforced)** |
 | Provenance gate | No | No | No | No | Partial | No | No | No | **Yes (no source = no claim)** |
@@ -379,6 +381,7 @@ Compared against every major memory solution for AI agents (as of 2026):
 | No daemon required | No | No | No | No | No | Yes | No | No | **Yes (just files + scripts)** |
 | Git-friendly (plain text) | No | No | No | Partial | No | No | No | No | **Yes (all Markdown)** |
 | OpenClaw native | No | Plugin | Plugin | No | No | Plugin | No | No | **Yes (hooks + skills)** |
+| MCP server | No | No | No | No | No | No | No | No | **Yes (FastMCP, stdio + HTTP)** |
 
 ### What Each Tool Does Best
 
@@ -647,6 +650,92 @@ All settings in `mem-os.json` (created by `init_workspace.py`):
 | `compaction.log_days` | `180` | Archive daily logs older than N days into yearly files |
 | `compaction.signal_days` | `60` | Remove resolved/rejected signals older than N days |
 | `scan_schedule` | `"daily"` | `"daily"` or `"manual"` |
+
+---
+
+## MCP Server
+
+Mem-OS ships with a [Model Context Protocol](https://modelcontextprotocol.io/) server that exposes memory as resources and tools to any MCP-compatible client.
+
+### Install
+
+```bash
+pip install fastmcp
+```
+
+### Claude Desktop
+
+Add to `~/.claude/claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "mem-os": {
+      "command": "python3",
+      "args": ["/path/to/mem-os/mcp_server.py"],
+      "env": {"MEM_OS_WORKSPACE": "/path/to/your/workspace"}
+    }
+  }
+}
+```
+
+### Cursor / Windsurf
+
+Add to your MCP config (`.cursor/mcp.json` or equivalent):
+
+```json
+{
+  "mcpServers": {
+    "mem-os": {
+      "command": "python3",
+      "args": ["/path/to/mem-os/mcp_server.py"],
+      "env": {"MEM_OS_WORKSPACE": "."}
+    }
+  }
+}
+```
+
+### OpenClaw (Claude Code)
+
+```bash
+# stdio transport (default)
+MEM_OS_WORKSPACE=/path/to/workspace python3 mcp_server.py
+
+# HTTP transport (multi-client)
+MEM_OS_WORKSPACE=/path/to/workspace python3 mcp_server.py --transport http --port 8765
+```
+
+### Resources (read-only)
+
+| URI | Description |
+|---|---|
+| `mem-os://decisions` | Active decisions |
+| `mem-os://tasks` | All tasks |
+| `mem-os://entities/{type}` | Entities (projects, people, tools, incidents) |
+| `mem-os://signals` | Auto-captured signals pending review |
+| `mem-os://contradictions` | Detected contradictions |
+| `mem-os://health` | Workspace health summary (block counts, metrics) |
+| `mem-os://recall/{query}` | BM25 recall search results |
+| `mem-os://ledger` | Shared fact ledger (multi-agent) |
+
+### Tools
+
+| Tool | Description |
+|---|---|
+| `recall` | Search memory with BM25 (query, limit, active_only) |
+| `propose_update` | Propose a decision/task — writes to SIGNALS.md only, never source of truth |
+| `scan` | Run integrity scan (contradictions, drift, signals) |
+| `list_contradictions` | List contradictions with auto-resolution analysis |
+
+### Safety Guarantees
+
+- **`propose_update` never writes to DECISIONS.md or TASKS.md.** All proposals go to `intelligence/SIGNALS.md` and must be promoted via `/apply`.
+- **All resources are read-only.** No MCP client can mutate source of truth through resources.
+- **Namespace-aware.** Multi-agent workspaces scope resources by agent ACL.
+
+### Tags
+
+`persistent-memory` `governance` `append-only` `contradiction-safe` `audit-trail` `zero-dependencies` `local-first`
 
 ---
 

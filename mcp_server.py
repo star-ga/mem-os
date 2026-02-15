@@ -1,0 +1,382 @@
+#!/usr/bin/env python3
+"""Mem-OS MCP Server — persistent memory for paranoid/safety-first coding agents.
+
+Exposes Mem-OS as a Model Context Protocol server, making structured memory
+accessible to any MCP-compatible client (Claude Desktop, Cursor, Windsurf,
+OpenClaw).
+
+Resources (read-only):
+    mem-os://decisions         — All active decisions
+    mem-os://tasks             — All tasks
+    mem-os://entities/{type}   — Entity files (projects, people, tools, incidents)
+    mem-os://signals           — Auto-captured signals
+    mem-os://contradictions    — Detected contradictions
+    mem-os://health            — Workspace health summary
+    mem-os://recall/{query}    — BM25 recall search
+    mem-os://ledger            — Shared fact ledger (multi-agent)
+
+Tools:
+    recall               — Search memory with BM25
+    propose_update       — Propose a new decision/task (writes to SIGNALS.md, never source of truth)
+    scan                 — Run integrity scan
+    list_contradictions  — List detected contradictions with resolution status
+
+Transport:
+    stdio (default, for Claude Desktop / OpenClaw)
+    http  (for remote / multi-client)
+
+Usage:
+    # stdio (Claude Desktop / OpenClaw)
+    python3 mcp_server.py
+
+    # http
+    python3 mcp_server.py --transport http --port 8765
+
+    # with custom workspace
+    MEM_OS_WORKSPACE=/path/to/workspace python3 mcp_server.py
+
+Claude Desktop config (~/.claude/claude_desktop_config.json):
+    {
+      "mcpServers": {
+        "mem-os": {
+          "command": "python3",
+          "args": ["/path/to/mem-os/mcp_server.py"],
+          "env": {"MEM_OS_WORKSPACE": "/path/to/workspace"}
+        }
+      }
+    }
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import sys
+
+# Add scripts/ to path for mem-os imports
+SCRIPT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "scripts")
+sys.path.insert(0, SCRIPT_DIR)
+
+from fastmcp import FastMCP
+
+from block_parser import parse_file, get_active, get_by_id
+from recall import recall as recall_engine
+from observability import get_logger, metrics
+
+_log = get_logger("mcp_server")
+
+# ---------------------------------------------------------------------------
+# Server setup
+# ---------------------------------------------------------------------------
+
+mcp = FastMCP(
+    name="mem-os",
+    instructions=(
+        "Mem-OS: persistent, auditable, contradiction-safe memory for coding agents. "
+        "Use recall to search memory. Use propose_update to suggest changes (never writes "
+        "directly to source of truth). All proposals go through human review."
+    ),
+)
+
+
+def _workspace() -> str:
+    """Resolve workspace path from environment."""
+    ws = os.environ.get("MEM_OS_WORKSPACE", ".")
+    return os.path.abspath(ws)
+
+
+def _read_file(rel_path: str) -> str:
+    """Read a file from workspace, return contents or error message."""
+    path = os.path.join(_workspace(), rel_path)
+    if not os.path.isfile(path):
+        return f"File not found: {rel_path}"
+    with open(path, "r", encoding="utf-8") as f:
+        return f.read()
+
+
+def _blocks_to_json(blocks: list[dict]) -> str:
+    """Convert parsed blocks to JSON string."""
+    return json.dumps(blocks, indent=2, default=str)
+
+
+# ---------------------------------------------------------------------------
+# Resources (read-only)
+# ---------------------------------------------------------------------------
+
+@mcp.resource("mem-os://decisions")
+def get_decisions() -> str:
+    """Active decisions from the workspace. Structured blocks with IDs, statements, dates, and status."""
+    ws = _workspace()
+    path = os.path.join(ws, "decisions", "DECISIONS.md")
+    if not os.path.isfile(path):
+        return json.dumps([])
+    blocks = parse_file(path)
+    active = get_active(blocks)
+    return _blocks_to_json(active)
+
+
+@mcp.resource("mem-os://tasks")
+def get_tasks() -> str:
+    """All tasks from the workspace."""
+    ws = _workspace()
+    path = os.path.join(ws, "tasks", "TASKS.md")
+    if not os.path.isfile(path):
+        return json.dumps([])
+    blocks = parse_file(path)
+    return _blocks_to_json(blocks)
+
+
+@mcp.resource("mem-os://entities/{entity_type}")
+def get_entities(entity_type: str) -> str:
+    """Entity files: projects, people, tools, or incidents."""
+    allowed = {"projects", "people", "tools", "incidents"}
+    if entity_type not in allowed:
+        return json.dumps({"error": f"Unknown entity type: {entity_type}. Use: {', '.join(sorted(allowed))}"})
+    return _read_file(f"entities/{entity_type}.md")
+
+
+@mcp.resource("mem-os://signals")
+def get_signals() -> str:
+    """Auto-captured signals pending review."""
+    return _read_file("intelligence/SIGNALS.md")
+
+
+@mcp.resource("mem-os://contradictions")
+def get_contradictions() -> str:
+    """Detected contradictions between decisions."""
+    return _read_file("intelligence/CONTRADICTIONS.md")
+
+
+@mcp.resource("mem-os://health")
+def get_health() -> str:
+    """Workspace health summary: block counts, coverage, and metrics."""
+    ws = _workspace()
+    result = {"workspace": ws, "files": {}, "metrics": {}}
+
+    corpus = {
+        "decisions": "decisions/DECISIONS.md",
+        "tasks": "tasks/TASKS.md",
+        "contradictions": "intelligence/CONTRADICTIONS.md",
+        "signals": "intelligence/SIGNALS.md",
+    }
+
+    for label, rel_path in corpus.items():
+        path = os.path.join(ws, rel_path)
+        if os.path.isfile(path):
+            blocks = parse_file(path)
+            result["files"][label] = {
+                "total": len(blocks),
+                "active": len(get_active(blocks)),
+            }
+        else:
+            result["files"][label] = {"total": 0, "active": 0}
+
+    # State snapshot metrics
+    state_path = os.path.join(ws, "memory", "intel-state.json")
+    if os.path.isfile(state_path):
+        with open(state_path, "r", encoding="utf-8") as f:
+            try:
+                state = json.load(f)
+                result["metrics"] = state.get("metrics", {})
+            except json.JSONDecodeError:
+                pass
+
+    return json.dumps(result, indent=2)
+
+
+@mcp.resource("mem-os://recall/{query}")
+def get_recall(query: str) -> str:
+    """Search memory using BM25 recall. Returns ranked results."""
+    ws = _workspace()
+    results = recall_engine(ws, query, limit=10)
+    return json.dumps(results, indent=2, default=str)
+
+
+@mcp.resource("mem-os://ledger")
+def get_ledger() -> str:
+    """Shared fact ledger for multi-agent memory propagation."""
+    return _read_file("shared/intelligence/LEDGER.md")
+
+
+# ---------------------------------------------------------------------------
+# Tools
+# ---------------------------------------------------------------------------
+
+@mcp.tool
+def recall(query: str, limit: int = 10, active_only: bool = False) -> str:
+    """Search across all memory files with BM25 ranking.
+
+    Args:
+        query: Search query (supports stemming and domain-aware expansion).
+        limit: Maximum number of results (default: 10).
+        active_only: Only return blocks with Status: active.
+
+    Returns:
+        JSON array of ranked results with scores, IDs, and matched content.
+    """
+    ws = _workspace()
+    results = recall_engine(ws, query, limit=limit, active_only=active_only)
+    metrics.inc("mcp_recall_queries")
+    _log.info("mcp_recall", query=query, results=len(results))
+    return json.dumps(results, indent=2, default=str)
+
+
+@mcp.tool
+def propose_update(
+    block_type: str,
+    statement: str,
+    rationale: str = "",
+    tags: str = "",
+    confidence: str = "medium",
+) -> str:
+    """Propose a new decision or task. Writes to SIGNALS.md for human review.
+
+    SAFETY: This never writes directly to DECISIONS.md or TASKS.md.
+    All proposals must go through the apply engine (/apply) for review.
+
+    Args:
+        block_type: Type of block — "decision" or "task".
+        statement: The decision statement or task description.
+        rationale: Why this decision/task is needed.
+        tags: Comma-separated tags (e.g., "database, infrastructure").
+        confidence: Signal confidence — "high", "medium", or "low".
+
+    Returns:
+        Confirmation with signal ID and status.
+    """
+    ws = _workspace()
+
+    if block_type not in ("decision", "task"):
+        return json.dumps({"error": f"block_type must be 'decision' or 'task', got '{block_type}'"})
+
+    from datetime import datetime
+    from capture import append_signals, CONFIDENCE_TO_PRIORITY
+
+    today = datetime.now().strftime("%Y-%m-%d")
+    priority = CONFIDENCE_TO_PRIORITY.get(confidence, "P2")
+
+    signal = {
+        "line": 0,
+        "type": block_type,
+        "text": statement,
+        "pattern": "mcp_propose_update",
+        "confidence": confidence,
+        "priority": priority,
+        "structure": {
+            "subject": statement.split()[:3] if statement else [],
+            "tags": [t.strip() for t in tags.split(",") if t.strip()],
+        },
+    }
+    if rationale:
+        signal["structure"]["rationale"] = rationale
+
+    written = append_signals(ws, [signal], today)
+
+    metrics.inc("mcp_proposals")
+    _log.info("mcp_propose", block_type=block_type, confidence=confidence, written=written)
+
+    return json.dumps({
+        "status": "proposed",
+        "written": written,
+        "location": "intelligence/SIGNALS.md",
+        "next_step": "Run /apply or `python3 maintenance/apply_engine.py` to review and promote to source of truth.",
+        "safety": "This signal is in SIGNALS.md only. It has NOT been written to DECISIONS.md or TASKS.md.",
+    }, indent=2)
+
+
+@mcp.tool
+def scan() -> str:
+    """Run integrity scan — contradictions, drift, dead decisions, impact graph.
+
+    Returns:
+        JSON summary of scan results.
+    """
+    ws = _workspace()
+
+    result = {"workspace": ws, "checks": {}}
+
+    # Parse decisions
+    decisions_path = os.path.join(ws, "decisions", "DECISIONS.md")
+    if os.path.isfile(decisions_path):
+        blocks = parse_file(decisions_path)
+        active = get_active(blocks)
+        result["checks"]["decisions"] = {
+            "total": len(blocks),
+            "active": len(active),
+        }
+    else:
+        result["checks"]["decisions"] = {"total": 0, "active": 0}
+
+    # Check contradictions
+    contra_path = os.path.join(ws, "intelligence", "CONTRADICTIONS.md")
+    if os.path.isfile(contra_path):
+        contras = parse_file(contra_path)
+        result["checks"]["contradictions"] = len(contras)
+    else:
+        result["checks"]["contradictions"] = 0
+
+    # Check drift
+    drift_path = os.path.join(ws, "intelligence", "DRIFT.md")
+    if os.path.isfile(drift_path):
+        drifts = parse_file(drift_path)
+        result["checks"]["drift_items"] = len(drifts)
+    else:
+        result["checks"]["drift_items"] = 0
+
+    # Check signals
+    signals_path = os.path.join(ws, "intelligence", "SIGNALS.md")
+    if os.path.isfile(signals_path):
+        signals = parse_file(signals_path)
+        result["checks"]["pending_signals"] = len(signals)
+    else:
+        result["checks"]["pending_signals"] = 0
+
+    metrics.inc("mcp_scans")
+    _log.info("mcp_scan", checks=result["checks"])
+
+    return json.dumps(result, indent=2)
+
+
+@mcp.tool
+def list_contradictions() -> str:
+    """List detected contradictions with resolution analysis.
+
+    Returns:
+        JSON array of contradictions with strategy recommendations.
+    """
+    ws = _workspace()
+
+    from conflict_resolver import resolve_contradictions
+
+    resolutions = resolve_contradictions(ws)
+    if not resolutions:
+        return json.dumps({"status": "clean", "contradictions": 0, "message": "No contradictions found."})
+
+    return json.dumps({
+        "status": "contradictions_found",
+        "contradictions": len(resolutions),
+        "resolutions": resolutions,
+    }, indent=2, default=str)
+
+
+# ---------------------------------------------------------------------------
+# Entry point
+# ---------------------------------------------------------------------------
+
+if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Mem-OS MCP Server")
+    parser.add_argument("--transport", choices=["stdio", "http"], default="stdio",
+                        help="Transport protocol (default: stdio)")
+    parser.add_argument("--port", type=int, default=8765,
+                        help="HTTP port (only used with --transport http)")
+    args = parser.parse_args()
+
+    _log.info("mcp_server_start", transport=args.transport,
+              workspace=_workspace())
+
+    if args.transport == "http":
+        mcp.run(transport="http", port=args.port)
+    else:
+        mcp.run()
