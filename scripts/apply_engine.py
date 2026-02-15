@@ -95,7 +95,7 @@ def validate_proposal(proposal):
     errors = []
 
     # Required fields
-    for field in ("ProposalId", "Type", "TargetBlock", "Risk", "Status", "Evidence", "Rollback"):
+    for field in ("ProposalId", "Type", "TargetBlock", "Risk", "Status", "Evidence", "Rollback", "Fingerprint"):
         if not proposal.get(field):
             errors.append(f"Missing required field: {field}")
 

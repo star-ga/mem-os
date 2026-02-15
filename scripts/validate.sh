@@ -137,7 +137,7 @@ if [[ -f "$TASK_FILE" ]]; then
   fi
 
   # Required fields (including Dependencies)
-  for field in "Title:" "Status:" "Priority:" "Project:" "Due:" "Owner:" "Context:" "Next:" "Dependencies:" "Sources:" "History:"; do
+  for field in "Date:" "Title:" "Status:" "Priority:" "Project:" "Due:" "Owner:" "Context:" "Next:" "Dependencies:" "Sources:" "History:"; do
     fc=$(grep -c "^$field" "$TASK_FILE" || true)
     if [[ "$fc" -ge "$task_count" ]]; then
       pass "Tasks: $field present ($fc/$task_count)"

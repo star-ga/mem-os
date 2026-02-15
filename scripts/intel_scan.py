@@ -168,7 +168,10 @@ def detect_contradictions(decisions, report):
                 if s1["decision"] == s2["decision"]:
                     continue
 
-                pair_key = tuple(sorted([s1["sig"]["id"], s2["sig"]["id"]]))
+                pair_key = tuple(sorted([
+                    f"{s1['decision']}:{s1['sig']['id']}",
+                    f"{s2['decision']}:{s2['sig']['id']}",
+                ]))
                 if pair_key in checked:
                     continue
                 checked.add(pair_key)
@@ -1091,8 +1094,8 @@ def generate_proposals(contradictions, drift_signals, ws, intel_state, report):
                     f"Sources:\n"
                     f"- maintenance/intel-report.txt\n"
                 )
-                # Skip if already proposed
-                if p["target"] in existing and "staged" in existing:
+                # Skip if same fingerprint already exists in proposed file
+                if f"Fingerprint: {fp}" in existing:
                     continue
                 new_blocks.append(block)
 

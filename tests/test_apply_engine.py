@@ -70,6 +70,7 @@ class TestValidateProposal(unittest.TestCase):
             "Status": "staged",
             "Evidence": "Test evidence",
             "Rollback": "Revert changes",
+            "Fingerprint": "abcdef1234567890",
             "Ops": [{"op": "append_block", "file": "decisions/DECISIONS.md"}],
         }
         base.update(overrides)
