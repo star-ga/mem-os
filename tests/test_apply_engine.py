@@ -373,21 +373,21 @@ class TestModeGate(unittest.TestCase):
 
 
 class TestBacklogLimit(unittest.TestCase):
-    """Backlog limit uses > (not >=) — allows apply at exact limit."""
+    """Backlog limit uses >= — blocks at exact limit per M6 invariant."""
 
-    def test_at_exact_limit_not_exceeded(self):
-        """count == limit should NOT be exceeded (> not >=)."""
+    def test_at_exact_limit_is_exceeded(self):
+        """count == limit should be exceeded (>= per M6)."""
         from apply_engine import check_backlog_limit
         with tempfile.TemporaryDirectory() as ws:
             from init_workspace import init
             init(ws)
-            # Write exactly 3 staged proposals, set limit to 3
-            state_path = os.path.join(ws, "memory/intel-state.json")
-            with open(state_path) as f:
-                state = json.load(f)
-            state["proposal_budget"] = {"backlog_limit": 3}
-            with open(state_path, "w") as f:
-                json.dump(state, f)
+            # Set limit in mem-os.json (source of truth for config)
+            config_path = os.path.join(ws, "mem-os.json")
+            with open(config_path) as f:
+                config = json.load(f)
+            config["proposal_budget"] = {"backlog_limit": 3}
+            with open(config_path, "w") as f:
+                json.dump(config, f)
 
             # Create 3 staged proposals
             proposed_dir = os.path.join(ws, "intelligence/proposed")
@@ -398,20 +398,20 @@ class TestBacklogLimit(unittest.TestCase):
 
             count, exceeded = check_backlog_limit(ws)
             self.assertEqual(count, 3)
-            self.assertFalse(exceeded, "At exact limit should NOT be exceeded")
+            self.assertTrue(exceeded, "At exact limit should be exceeded per M6")
 
-    def test_over_limit_is_exceeded(self):
-        """count > limit should be exceeded."""
+    def test_under_limit_not_exceeded(self):
+        """count < limit should NOT be exceeded."""
         from apply_engine import check_backlog_limit
         with tempfile.TemporaryDirectory() as ws:
             from init_workspace import init
             init(ws)
-            state_path = os.path.join(ws, "memory/intel-state.json")
-            with open(state_path) as f:
-                state = json.load(f)
-            state["proposal_budget"] = {"backlog_limit": 2}
-            with open(state_path, "w") as f:
-                json.dump(state, f)
+            config_path = os.path.join(ws, "mem-os.json")
+            with open(config_path) as f:
+                config = json.load(f)
+            config["proposal_budget"] = {"backlog_limit": 5}
+            with open(config_path, "w") as f:
+                json.dump(config, f)
 
             proposed_dir = os.path.join(ws, "intelligence/proposed")
             os.makedirs(proposed_dir, exist_ok=True)
@@ -421,7 +421,7 @@ class TestBacklogLimit(unittest.TestCase):
 
             count, exceeded = check_backlog_limit(ws)
             self.assertEqual(count, 3)
-            self.assertTrue(exceeded, "Over limit should be exceeded")
+            self.assertFalse(exceeded, "Under limit should not be exceeded")
 
 
 class TestFingerprintDedupCollision(unittest.TestCase):

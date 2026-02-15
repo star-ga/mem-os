@@ -677,8 +677,14 @@ def check_fingerprint_dedup(ws, proposal):
 
 def check_backlog_limit(ws):
     """Count staged proposals. Returns (count, limit_exceeded)."""
-    state = _load_intel_state(ws)
-    limit = state.get("proposal_budget", {}).get("backlog_limit", 30)
+    # Read limit from mem-os.json (source of truth for config), not intel-state.json
+    config_path = os.path.join(ws, "mem-os.json")
+    try:
+        with open(config_path) as f:
+            config = json.load(f)
+    except Exception:
+        config = {}
+    limit = config.get("proposal_budget", {}).get("backlog_limit", 30)
     count = 0
     for pfile in PROPOSED_FILES:
         path = os.path.join(ws, pfile)
@@ -686,7 +692,7 @@ def check_backlog_limit(ws):
             continue
         blocks = parse_file(path)
         count += sum(1 for b in blocks if b.get("Status") == "staged")
-    return count, count > limit
+    return count, count >= limit
 
 
 def check_no_touch_window(ws):

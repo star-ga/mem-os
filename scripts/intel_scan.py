@@ -791,12 +791,13 @@ def write_contradictions(contradictions, ws, report):
         existing = ""
 
     today = datetime.now().strftime("%Y%m%d")
-    # Count existing for today to get next sequence number
-    existing_today = len(re.findall(rf"^\[C-{today}-\d{{3}}\]", existing, re.MULTILINE))
+    # Find highest existing index for today to avoid ID collisions
+    existing_ids = re.findall(rf"^\[C-{today}-(\d{{3}})\]", existing, re.MULTILINE)
+    existing_max = max((int(x) for x in existing_ids), default=0)
 
     new_blocks = []
     for i, c in enumerate(contradictions):
-        cid = f"C-{today}-{existing_today + i + 1:03d}"
+        cid = f"C-{today}-{existing_max + i + 1:03d}"
 
         # Skip if signatures already recorded
         sig_pair = f"{c['sig1']['sig']['id']} vs {c['sig2']['sig']['id']}"
@@ -842,11 +843,12 @@ def write_drift(drift_signals, ws, report):
         existing = ""
 
     today = datetime.now().strftime("%Y%m%d")
-    existing_today = len(re.findall(rf"^\[DREF-{today}-\d{{3}}\]", existing, re.MULTILINE))
+    existing_ids = re.findall(rf"^\[DREF-{today}-(\d{{3}})\]", existing, re.MULTILINE)
+    existing_max = max((int(x) for x in existing_ids), default=0)
 
     new_blocks = []
     for i, s in enumerate(drift_signals):
-        dref_id = f"DREF-{today}-{existing_today + i + 1:03d}"
+        dref_id = f"DREF-{today}-{existing_max + i + 1:03d}"
 
         # Skip if similar signal already recorded today
         if s["signal"] in existing and today[:8] in existing:
@@ -963,7 +965,7 @@ def generate_proposals(contradictions, drift_signals, ws, intel_state, report):
 
     # Check backlog limit
     staged = _count_staged_proposals(ws)
-    if staged > backlog_limit:
+    if staged >= backlog_limit:
         report.warn(f"Backlog limit reached ({staged}/{backlog_limit}) — skipping proposals.")
         return 0
 
