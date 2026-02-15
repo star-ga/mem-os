@@ -23,6 +23,20 @@ class TestTokenize(unittest.TestCase):
     def test_numbers(self):
         self.assertIn("42", tokenize("answer is 42"))
 
+    def test_stopwords_filtered(self):
+        tokens = tokenize("the database is being used for all queries")
+        self.assertNotIn("the", tokens)
+        self.assertNotIn("is", tokens)
+        self.assertNotIn("for", tokens)
+        self.assertIn("database", tokens)
+        self.assertIn("queries", tokens)
+
+    def test_single_char_filtered(self):
+        tokens = tokenize("a b c database")
+        self.assertNotIn("a", tokens)
+        self.assertNotIn("b", tokens)
+        self.assertEqual(tokens, ["database"])
+
 
 class TestExtractText(unittest.TestCase):
     def test_extracts_search_fields(self):

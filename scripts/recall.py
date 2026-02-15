@@ -76,9 +76,25 @@ CORPUS_FILES = {
 }
 
 
+_STOPWORDS = frozenset({
+    "a", "an", "the", "is", "are", "was", "were", "be", "been", "being",
+    "have", "has", "had", "do", "does", "did", "will", "would", "shall",
+    "should", "may", "might", "can", "could", "must", "and", "but", "or",
+    "nor", "not", "so", "yet", "for", "of", "to", "in", "on", "at", "by",
+    "with", "from", "as", "into", "about", "between", "through", "during",
+    "before", "after", "above", "below", "up", "down", "out", "off", "over",
+    "under", "again", "further", "then", "once", "here", "there", "when",
+    "where", "why", "how", "all", "each", "every", "both", "few", "more",
+    "most", "other", "some", "such", "no", "only", "own", "same", "than",
+    "too", "very", "just", "because", "if", "while", "that", "this",
+    "it", "its", "we", "they", "them", "their", "he", "she", "his", "her",
+})
+
+
 def tokenize(text):
-    """Split text into lowercase tokens."""
-    return re.findall(r"[a-z0-9_]+", text.lower())
+    """Split text into lowercase tokens, filtering stopwords."""
+    return [t for t in re.findall(r"[a-z0-9_]+", text.lower())
+            if t not in _STOPWORDS and len(t) > 1]
 
 
 def extract_text(block):
