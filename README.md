@@ -95,6 +95,8 @@ Mem-OS recall engine evaluated on two standard long-term memory benchmarks. Zero
 | Multi-hop | 321 | 47.4% | 66.4% | 71.0% | 0.549 |
 | Open-domain | 841 | 38.4% | 62.1% | 70.0% | 0.484 |
 
+**Context:** These are pure retrieval metrics (no LLM judge). Mem0 reports 66.9–68.5% on LoCoMo via LLM-as-judge accuracy (graph variant). Letta's plain-file baseline scored 74.0% with gpt-4o-mini — demonstrating that simple storage + agentic tool use outperforms engineered retrieval pipelines on LoCoMo. Mem-OS's Markdown-file + BM25 approach is architecturally aligned with these high-performing baselines while adding integrity guarantees no other system provides.
+
 Run benchmarks yourself: `python3 benchmarks/locomo_harness.py` or `python3 benchmarks/longmemeval_harness.py`
 
 ### Persistent Memory
@@ -139,8 +141,8 @@ Crash-safe writes via journal-based WAL. Full workspace backup (tar.gz), git-fri
 ### Transcript JSONL Capture
 Scans Claude Code / OpenClaw transcript files for user corrections, convention discoveries, bug fix insights, and architectural decisions. 16 transcript-specific patterns with role filtering and confidence classification.
 
-### 74+ Structural Checks + 302 Unit Tests
-`validate.sh` checks schemas, cross-references, ID formats, status values, supersede chains, ConstraintSignatures, and more. Backed by 316 pytest unit tests covering parser, recall (BM25 + stemming + expansion), capture (structured extraction + confidence), compaction, file locking, observability, namespaces, conflict resolution, WAL/backup, transcript capture, apply, and intel_scan.
+### 74+ Structural Checks + 369 Unit Tests
+`validate.sh` checks schemas, cross-references, ID formats, status values, supersede chains, ConstraintSignatures, and more. Backed by 369 pytest unit tests covering parser, recall (BM25 + stemming + expansion), capture (structured extraction + confidence), compaction, file locking, observability, namespaces, conflict resolution, WAL/backup, transcript capture, apply, intel_scan, schema migration, MCP server, and edge cases.
 
 ### Audit Trail
 Every applied proposal logged with timestamp, receipt, and DIFF. Full traceability from signal → proposal → decision.
@@ -414,7 +416,7 @@ Compared against every major memory solution for AI agents (as of 2026):
 | **Mem0** | Fast managed service, graph memory, multi-user scoping | Cloud-dependent, no integrity checking |
 | **Supermemory** | Fastest retrieval (ms), auto-ingestion from Drive/Notion | Cloud-dependent, auto-writes without review |
 | **claude-mem** | Purpose-built for Claude Code, ChromaDB vectors, lifecycle hooks | Requires ChromaDB + Express worker, no integrity |
-| **Letta** | Self-editing memory blocks, sleep-time compute, skill learning | Full agent runtime (heavy), not just memory |
+| **Letta** | Self-editing memory blocks, sleep-time compute, 74% LoCoMo (plain-file baseline) | Full agent runtime (heavy), not just memory |
 | **Zep** | Temporal knowledge graph, bi-temporal model, sub-second at scale | Cloud service, complex architecture |
 | **LangMem** | Native LangChain/LangGraph integration | Tied to LangChain ecosystem |
 | **Cognee** | Advanced chunking, web content bridging | Research-oriented, complex setup |
@@ -432,6 +434,17 @@ Every tool above does **storage + retrieval**. None of them answer:
 - "Is my memory state structurally valid right now?"
 
 **Mem OS focuses on memory governance and integrity — an area most memory systems do not address directly.**
+
+### Why Plain Files Outperform Fancy Retrieval
+
+Letta's August 2025 analysis showed that a plain-file baseline (full conversations stored as files + agent filesystem tools) scored **74.0% on LoCoMo** with gpt-4o-mini — beating Mem0's top graph variant at 68.5%. Key reasons:
+
+- **LLMs excel at tool-based retrieval.** Agents can iteratively query/refine file searches better than single-shot vector retrieval that might miss subtle connections.
+- **Benchmarks reward recall + reasoning over storage sophistication.** Strong judge LLMs handle the rest once relevant chunks are loaded.
+- **Overhead hurts.** Specialized pipelines introduce failure modes (bad embeddings, chunking errors, stale indexes) that simple file access avoids.
+- **For text-heavy agentic use cases, "how well the agent manages context" > "how smart the retrieval index is."**
+
+Mem-OS's Markdown-file + BM25 approach is architecturally aligned with these findings — and adds integrity, governance, and self-correction that no plain-file baseline provides.
 
 ---
 
