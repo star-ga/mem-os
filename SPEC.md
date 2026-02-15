@@ -261,6 +261,11 @@ ReceiptBody   ::= "Date:" Space ISOTimestamp NewLine
                   "Action:" Space ActionDesc NewLine
                   "Result:" Space ("applied" | "rolled_back" | "rejected") NewLine
                   "Snapshot:" Space SnapshotID NewLine
+                  [ "Risk:" Space RiskLevel NewLine ]
+                  [ "TargetBlock:" Space BlockID NewLine ]
+                  [ "FilesTouched:" NewLine { "- " FilePath NewLine } ]
+                  [ "PreChecks:" Space CheckResult NewLine ]
+                  [ "RollbackPlan:" Space PlanDesc NewLine ]
                   [ "DIFF:" NewLine DiffBlock ]
 ```
 

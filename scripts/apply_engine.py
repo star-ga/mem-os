@@ -111,7 +111,8 @@ def validate_proposal(proposal):
     evidence = proposal.get("Evidence", [])
     if isinstance(evidence, str):
         evidence = [evidence]
-    if not evidence or evidence == [""] or evidence == []:
+    evidence = [e for e in evidence if isinstance(e, str) and e.strip()]
+    if not evidence:
         errors.append("Evidence is empty")
 
     # Ops validation

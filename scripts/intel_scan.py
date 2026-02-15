@@ -267,8 +267,8 @@ def check_signature_conflict(sig1, sig2):
     conflict_level = MODALITY_CONFLICTS.get((m1, m2))
     if conflict_level:
         # Only flag modality conflicts when objects overlap or are unspecified
-        obj1 = sig1.get("object", "")
-        obj2 = sig2.get("object", "")
+        obj1 = sig1.get("object", "").lower()
+        obj2 = sig2.get("object", "").lower()
         if not obj1 or not obj2 or obj1 == obj2:
             return {
                 "severity": conflict_level,
@@ -276,8 +276,8 @@ def check_signature_conflict(sig1, sig2):
             }
 
     # ── Competing requirements: same modality, same predicate, different objects ──
-    shared_predicate = sig1.get("predicate") == sig2.get("predicate")
-    shared_object = sig1.get("object") == sig2.get("object")
+    shared_predicate = sig1.get("predicate", "").lower() == sig2.get("predicate", "").lower()
+    shared_object = sig1.get("object", "").lower() == sig2.get("object", "").lower()
 
     if shared_predicate and not shared_object:
         if m1 in ("must", "must_not") and m2 in ("must", "must_not") and m1 == m2:
@@ -1044,7 +1044,10 @@ def generate_proposals(contradictions, drift_signals, ws, intel_state, report):
         # Group proposals by target file
         by_file = {}
         for p in proposals:
-            target_file = TYPE_TO_FILE.get(p["type"], "intelligence/proposed/EDITS_PROPOSED.md")
+            if p["type"] not in TYPE_TO_FILE:
+                report.warn(f"Skipping proposal {p['id']}: invalid type '{p['type']}'")
+                continue
+            target_file = TYPE_TO_FILE[p["type"]]
             by_file.setdefault(target_file, []).append(p)
 
         new_blocks_total = 0
