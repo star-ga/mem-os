@@ -151,7 +151,10 @@ def recall(workspace, query, limit=10, active_only=False):
         path = os.path.join(workspace, rel_path)
         if not os.path.isfile(path):
             continue
-        blocks = parse_file(path)
+        try:
+            blocks = parse_file(path)
+        except (OSError, UnicodeDecodeError, ValueError):
+            continue
         if active_only:
             blocks = get_active(blocks)
         for b in blocks:

@@ -105,17 +105,12 @@ def append_signals(workspace, signals, date_str):
     if not new_signals:
         return 0
 
-    # Find next signal ID
+    # Find next signal ID — filter by today's date to avoid cross-date max
     existing_ids = re.findall(r"\[SIG-(\d{8}-\d{3})\]", existing)
-    if existing_ids:
-        last = max(existing_ids)
-        last_date, last_num = last[:8], int(last[9:])
-    else:
-        last_date, last_num = "", 0
-
     today_compact = date_str.replace("-", "")
-    if today_compact == last_date:
-        counter = last_num + 1
+    today_ids = [eid for eid in existing_ids if eid.startswith(today_compact)]
+    if today_ids:
+        counter = max(int(eid[9:]) for eid in today_ids) + 1
     else:
         counter = 1
 

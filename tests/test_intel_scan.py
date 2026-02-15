@@ -457,5 +457,22 @@ class TestParserQuotedInlineList(unittest.TestCase):
         self.assertEqual(result, ["a", "b", "c"])
 
 
+class TestParsedInlineDict(unittest.TestCase):
+    """Parser should handle quoted strings in inline dicts."""
+
+    def test_quoted_comma_in_dict_value(self):
+        """Quoted strings in dict values preserve commas."""
+        from block_parser import _parse_inline_dict
+        result = _parse_inline_dict('{tags: "frontend, ui", name: foo}')
+        self.assertEqual(result["tags"], "frontend, ui")
+        self.assertEqual(result["name"], "foo")
+
+    def test_unquoted_dict_unchanged(self):
+        """Regular dicts without quotes work as before."""
+        from block_parser import _parse_inline_dict
+        result = _parse_inline_dict('{key: val, key2: val2}')
+        self.assertEqual(result, {"key": "val", "key2": "val2"})
+
+
 if __name__ == "__main__":
     unittest.main()

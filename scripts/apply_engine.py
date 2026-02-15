@@ -297,10 +297,14 @@ def restore_snapshot(ws, snap_dir):
         if os.path.isdir(src):
             # Atomic pattern: copy to temp first, then swap
             tmp_dst = dst + ".rollback_tmp"
-            if os.path.isdir(tmp_dst):
+            if os.path.islink(tmp_dst):
+                os.unlink(tmp_dst)
+            elif os.path.isdir(tmp_dst):
                 shutil.rmtree(tmp_dst)
             shutil.copytree(src, tmp_dst)
-            if os.path.isdir(dst):
+            if os.path.islink(dst):
+                os.unlink(dst)
+            elif os.path.isdir(dst):
                 shutil.rmtree(dst)
             os.rename(tmp_dst, dst)
 
@@ -317,10 +321,14 @@ def restore_snapshot(ws, snap_dir):
                 shutil.copy2(src, dst)
             elif os.path.isdir(src):
                 tmp_dst = dst + ".rollback_tmp"
-                if os.path.isdir(tmp_dst):
+                if os.path.islink(tmp_dst):
+                    os.unlink(tmp_dst)
+                elif os.path.isdir(tmp_dst):
                     shutil.rmtree(tmp_dst)
                 shutil.copytree(src, tmp_dst)
-                if os.path.isdir(dst):
+                if os.path.islink(dst):
+                    os.unlink(dst)
+                elif os.path.isdir(dst):
                     shutil.rmtree(dst)
                 os.rename(tmp_dst, dst)
 

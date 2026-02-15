@@ -379,15 +379,32 @@ def _parse_inline_list(s):
 
 
 def _parse_inline_dict(s):
-    """Parse { key: val, key2: val2 } -> dict."""
+    """Parse { key: val, key2: val2 } -> dict. Quote-aware comma splitting."""
     inner = s[1:-1].strip()
     if not inner:
         return {}
+    # Quote-aware split on commas (same pattern as _parse_inline_list)
+    if '"' in inner:
+        pairs = []
+        current = []
+        in_quotes = False
+        for ch in inner:
+            if ch == '"':
+                in_quotes = not in_quotes
+            elif ch == ',' and not in_quotes:
+                pairs.append(''.join(current).strip())
+                current = []
+            else:
+                current.append(ch)
+        if current:
+            pairs.append(''.join(current).strip())
+    else:
+        pairs = [p.strip() for p in inner.split(",")]
     result = {}
-    for pair in inner.split(","):
+    for pair in pairs:
         if ":" in pair:
             k, v = pair.split(":", 1)
-            result[k.strip()] = _coerce_value(v.strip())
+            result[k.strip()] = _coerce_value(v.strip().strip('"'))
     return result
 
 
