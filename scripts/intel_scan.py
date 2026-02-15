@@ -283,21 +283,22 @@ def check_signature_conflict(sig1, sig2):
     shared_object = sig1.get("object", "").lower() == sig2.get("object", "").lower()
 
     if shared_predicate and not shared_object:
-        if m1 in ("must", "must_not") and m2 in ("must", "must_not") and m1 == m2:
-            # Two hard constraints on same axis with different objects = critical
+        # "must X" vs "must Y" = critical (can't satisfy both)
+        # "must_not X" vs "must_not Y" = compatible (just avoid both)
+        if m1 == "must" and m2 == "must":
             return {
                 "severity": "critical",
                 "reason": (
-                    f"competing hard requirements: both {m1} "
+                    f"competing hard requirements: both must "
                     f"{sig1.get('predicate', '?')} but different objects "
                     f"({sig1.get('object')} vs {sig2.get('object')}) on axis={ax1}"
                 ),
             }
-        if m1 in ("should", "should_not") and m2 in ("should", "should_not") and m1 == m2:
+        if m1 == "should" and m2 == "should":
             return {
                 "severity": "low",
                 "reason": (
-                    f"competing soft requirements: both {m1} "
+                    f"competing soft requirements: both should "
                     f"{sig1.get('predicate', '?')} but different objects "
                     f"({sig1.get('object')} vs {sig2.get('object')}) on axis={ax1}"
                 ),

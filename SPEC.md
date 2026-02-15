@@ -113,15 +113,18 @@ Two signatures **contradict** if all of the following hold:
 
 ```
 1. sig_a.axis.key == sig_b.axis.key
+   (Fallback: if axis.key is absent, use "{domain}.{subject}")
 2. Both parent decisions have Status == "active"
 3. Scopes overlap (time ranges and project sets intersect)
 4. Neither signature lists the other in its composes_with set
 5. At least one of:
    a. Modality conflict: (must vs must_not) or (must_not vs must) → critical
+      Also: (should vs should_not), (should vs must_not), etc → medium/low
    b. Competing requirements: same predicate, different objects,
-      both modalities in {must, must_not} → critical
+      both modality == "must" → critical
+      (Note: must_not + must_not with different objects is compatible)
    c. Preference tension: same predicate, different objects,
-      both modalities in {should, should_not} → warning
+      both modality == "should" → warning
 ```
 
 Signatures with `relation: composes_with` or `relation: requires` (both) are exempt.

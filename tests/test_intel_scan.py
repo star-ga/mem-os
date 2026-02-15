@@ -119,15 +119,14 @@ class TestCheckSignatureConflictCompeting(unittest.TestCase):
         self.assertEqual(result["severity"], "critical")
         self.assertIn("competing hard requirements", result["reason"])
 
-    def test_competing_must_not_different_objects_is_critical(self):
-        """Two 'must_not allow X' vs 'must_not allow Y' = critical (only if meaningful)."""
+    def test_competing_must_not_different_objects_is_compatible(self):
+        """Two 'must_not allow X' vs 'must_not allow Y' = compatible (avoid both)."""
         s1 = {"id": "CS-001", "axis": {"key": "auth.session"}, "modality": "must_not",
                "scope": {}, "predicate": "allow", "object": "plaintext_cookies"}
         s2 = {"id": "CS-002", "axis": {"key": "auth.session"}, "modality": "must_not",
                "scope": {}, "predicate": "allow", "object": "insecure_tokens"}
         result = check_signature_conflict(s1, s2)
-        self.assertIsNotNone(result)
-        self.assertEqual(result["severity"], "critical")
+        self.assertIsNone(result, "must_not + must_not with different objects are compatible")
 
     def test_competing_should_different_objects_is_low(self):
         """Two soft requirements with different objects = low severity."""

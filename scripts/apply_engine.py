@@ -52,7 +52,7 @@ PROPOSED_FILES = [
 SNAPSHOT_DIRS = [
     "decisions", "tasks", "entities", "summaries", "memory"
 ]
-SNAPSHOT_FILES = ["AGENTS.md", "MEMORY.md", "IDENTITY.md"]
+SNAPSHOT_FILES = ["AGENTS.md", "MEMORY.md", "IDENTITY.md", "mem-os.json"]
 
 
 # ═══════════════════════════════════════════════
@@ -140,6 +140,13 @@ def validate_proposal(proposal):
     ops_files = set(op.get("file", "") for op in ops)
     if files_touched and ops_files and not ops_files.issubset(files_touched):
         errors.append(f"Ops reference files not in FilesTouched: {ops_files - files_touched}")
+
+    # Fingerprint integrity: recompute and verify against stored value
+    stored_fp = proposal.get("Fingerprint", "")
+    if stored_fp and ops:
+        computed_fp = compute_fingerprint(proposal)
+        if computed_fp != stored_fp:
+            errors.append(f"Fingerprint mismatch: stored={stored_fp}, computed={computed_fp} (proposal may have been tampered)")
 
     return errors
 
