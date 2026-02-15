@@ -1,6 +1,6 @@
 # /recall — Memory Search
 
-Search across all structured memory files. Default backend: TF-IDF with field boosts and recency weighting. Optional: graph-based cross-reference boosting (`--graph`). Optional: vector/embedding backend (configure in mem-os.json). Returns ranked results with block ID, type, score, excerpt, and file path.
+Search across all structured memory files. Default backend: BM25 scoring with Porter stemming and domain-aware query expansion. Optional: graph-based cross-reference boosting (`--graph`). Optional: vector/embedding backend (configure in mem-os.json). Returns ranked results with block ID, type, score, excerpt, and file path.
 
 ## When to Use
 - Before making decisions (check if a similar decision already exists)
@@ -43,7 +43,9 @@ python3 maintenance/recall.py --query "deadline" --workspace "${MEM_OS_WORKSPACE
 - `intelligence/SIGNALS.md` — Captured signals
 
 ## Scoring
-Results are ranked by TF-IDF relevance with boosts for:
+Results are ranked by BM25 relevance (k1=1.2, b=0.75) with:
+- **Stemming** — "queries" matches "query", "deployed" matches "deployment"
+- **Query expansion** — "auth" expands to include "authentication", "login", "oauth", "jwt"
 - **Recency** — Recent items score higher
 - **Active status** — Active items get 1.2x boost
 - **Priority** — P0/P1 items get 1.1x boost

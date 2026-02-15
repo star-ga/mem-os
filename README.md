@@ -102,8 +102,20 @@ Automated workspace maintenance: archive completed blocks, clean up old snapshot
 ### Observability
 Structured JSON logging (via stdlib), in-process metrics counters, and timing context managers. All scripts emit machine-parseable events. Controlled via `MEM_OS_LOG_LEVEL` env var.
 
-### 74+ Structural Checks + 199 Unit Tests
-`validate.sh` checks schemas, cross-references, ID formats, status values, supersede chains, ConstraintSignatures, and more. Backed by 199 pytest unit tests covering parser, recall (BM25 + stemming + expansion), capture (structured extraction + confidence), compaction, file locking, observability, apply, and intel_scan.
+### Multi-Agent Namespaces & ACL
+Workspace-level + per-agent private namespaces with JSON-based ACL. fnmatch pattern matching for agent policies. Shared fact ledger for cross-agent propagation with dedup and review gate.
+
+### Automated Conflict Resolution
+Graduated resolution pipeline: timestamp priority, confidence priority, scope specificity, manual fallback. Generates supersede proposals with integrity hashes. Human veto loop — never auto-applies without review.
+
+### Write-Ahead Log (WAL) + Backup/Restore
+Crash-safe writes via journal-based WAL. Full workspace backup (tar.gz), git-friendly JSONL export, selective restore with conflict detection and path traversal protection.
+
+### Transcript JSONL Capture
+Scans Claude Code / OpenClaw transcript files for user corrections, convention discoveries, bug fix insights, and architectural decisions. 16 transcript-specific patterns with role filtering and confidence classification.
+
+### 74+ Structural Checks + 302 Unit Tests
+`validate.sh` checks schemas, cross-references, ID formats, status values, supersede chains, ConstraintSignatures, and more. Backed by 302 pytest unit tests covering parser, recall (BM25 + stemming + expansion), capture (structured extraction + confidence), compaction, file locking, observability, namespaces, conflict resolution, WAL/backup, transcript capture, apply, and intel_scan.
 
 ### Audit Trail
 Every applied proposal logged with timestamp, receipt, and DIFF. Full traceability from signal → proposal → decision.
@@ -234,7 +246,7 @@ $ bash maintenance/validate.sh .
 TOTAL: 74 checks | 74 passed | 0 issues | 1 warnings
 ```
 
-> Note: validate.sh check count scales with data — fresh workspaces have 74 checks, populated workspaces have more. The 1 warning is expected (no weekly summaries yet). Additionally, 199 pytest unit tests cover all core modules.
+> Note: validate.sh check count scales with data — fresh workspaces have 74 checks, populated workspaces have more. The 1 warning is expected (no weekly summaries yet). Additionally, 302 pytest unit tests cover all core modules.
 
 ---
 
@@ -282,12 +294,29 @@ your-workspace/
 │   ├── BRIEFINGS.md         # Weekly briefings
 │   ├── AUDIT.md             # Applied proposal audit trail
 │   ├── SCAN_LOG.md          # Scan history
-│   ├── proposed/            # Staged proposals
+│   ├── proposed/            # Staged proposals + resolution proposals
 │   │   ├── DECISIONS_PROPOSED.md
 │   │   ├── TASKS_PROPOSED.md
-│   │   └── EDITS_PROPOSED.md
+│   │   ├── EDITS_PROPOSED.md
+│   │   └── RESOLUTIONS_PROPOSED.md
 │   ├── applied/             # Snapshot archives (rollback)
 │   └── state/snapshots/     # State snapshots
+│
+├── shared/                  # Multi-agent shared namespace
+│   ├── decisions/
+│   ├── tasks/
+│   ├── entities/
+│   └── intelligence/
+│       └── LEDGER.md        # Cross-agent fact ledger
+│
+├── agents/                  # Per-agent private namespaces
+│   └── <agent-id>/
+│       ├── decisions/
+│       ├── tasks/
+│       └── memory/
+│
+├── mem-os-acl.json          # Multi-agent access control
+├── .mem-os-wal/             # Write-ahead log (crash recovery)
 │
 └── maintenance/
     ├── intel_scan.py         # Integrity scanner
@@ -295,9 +324,13 @@ your-workspace/
     ├── block_parser.py       # Markdown block parser (typed)
     ├── recall.py             # Recall engine (BM25 + stemming + graph)
     ├── capture.py            # Auto-capture (26 patterns + structured extraction)
-    ├── compaction.py          # Compaction/GC/archival engine
+    ├── compaction.py         # Compaction/GC/archival engine
     ├── filelock.py           # Cross-platform advisory file locking
     ├── observability.py      # Structured JSON logging + metrics
+    ├── namespaces.py         # Multi-agent namespace & ACL engine
+    ├── conflict_resolver.py  # Automated conflict resolution pipeline
+    ├── backup_restore.py     # WAL + backup/restore + JSONL export
+    ├── transcript_capture.py # Transcript JSONL signal extraction
     ├── validate.sh           # Structural validator (bash, 74+ checks)
     └── validate_py.py        # Structural validator (Python, cross-platform)
 ```
@@ -326,10 +359,14 @@ Compared against every major memory solution for AI agents (as of 2026):
 | **Integrity & Safety** | | | | | | | | | |
 | Contradiction detection | No | No | No | No | No | No | No | No | **Yes (ConstraintSignatures)** |
 | Drift analysis | No | No | No | No | No | No | No | No | **Yes (dead decisions, orphans)** |
-| Structural validation | No | No | No | No | No | No | No | No | **74+ checks + 199 tests** |
+| Structural validation | No | No | No | No | No | No | No | No | **74+ checks + 302 tests** |
 | Impact graph | No | No | No | No | No | No | No | No | **Yes (decision → task/entity)** |
 | Coverage scoring | No | No | No | No | No | No | No | No | **Yes (% decisions enforced)** |
 | Provenance gate | No | No | No | No | Partial | No | No | No | **Yes (no source = no claim)** |
+| Multi-agent namespaces | No | No | No | Yes | No | No | No | No | **Yes (ACL + shared ledger)** |
+| Conflict resolution | No | No | No | No | No | No | No | No | **Yes (graduated auto-resolve)** |
+| WAL / crash recovery | No | No | No | No | No | No | No | No | **Yes (journal-based)** |
+| Backup / restore | No | No | No | No | No | No | No | No | **Yes (tar.gz + JSONL export)** |
 | **Self-Correction** | | | | | | | | | |
 | Auto-capture | Auto-write | Auto-write | Auto-write | Self-edit | Auto-extract | Auto-extract | Auto-extract | Auto-ingest | **Proposal-based (safe)** |
 | Proposal queue | No | No | No | No | No | No | No | No | **Yes (proposed/)** |
@@ -439,6 +476,67 @@ User reviews signals
 **Batch scanning:** `python3 maintenance/capture.py . --scan-all` scans the last 7 days of daily logs at once.
 
 **Safety guarantee:** `capture.py` never writes to `decisions/` or `tasks/` directly. All signals must go through the apply engine to become formal blocks.
+
+---
+
+## Multi-Agent Memory
+
+### Namespace Setup
+
+```bash
+python3 maintenance/namespaces.py workspace/ --init coder-1 reviewer-1
+```
+
+Creates `shared/` (visible to all) and `agents/coder-1/`, `agents/reviewer-1/` (private) directories with ACL config (`mem-os-acl.json`).
+
+### Access Control
+
+Each agent sees only its own namespace + shared. ACL supports exact match, fnmatch patterns, and wildcard fallback:
+
+```json
+{
+  "default_policy": "read",
+  "agents": {
+    "coder-1": {"namespaces": ["shared", "agents/coder-1"], "write": ["agents/coder-1"], "read": ["shared"]},
+    "reviewer-*": {"namespaces": ["shared"], "write": [], "read": ["shared"]},
+    "*": {"namespaces": ["shared"], "write": [], "read": ["shared"]}
+  }
+}
+```
+
+### Shared Fact Ledger
+
+High-confidence facts can be proposed to `shared/intelligence/LEDGER.md`, where they become visible to all agents after review. Append-only with dedup and file locking.
+
+### Conflict Resolution
+
+```bash
+python3 maintenance/conflict_resolver.py workspace/ --analyze
+python3 maintenance/conflict_resolver.py workspace/ --propose
+```
+
+Graduated resolution: confidence priority (ConstraintSignature delta >= 2) > scope specificity (field count delta >= 2) > timestamp priority (newer wins) > manual fallback. Proposals written to `intelligence/proposed/RESOLUTIONS_PROPOSED.md` for human review.
+
+### Transcript Capture
+
+```bash
+python3 maintenance/transcript_capture.py workspace/ --transcript path/to/session.jsonl
+python3 maintenance/transcript_capture.py workspace/ --scan-recent --days 3
+python3 maintenance/transcript_capture.py workspace/ --scan-recent --role user
+```
+
+Scans Claude Code JSONL transcripts for user corrections ("never use X", "always do Y"), convention discoveries, bug fix insights, and architectural decisions. 16 patterns with confidence classification.
+
+### Backup & Restore
+
+```bash
+python3 maintenance/backup_restore.py backup workspace/ --output backup.tar.gz
+python3 maintenance/backup_restore.py export workspace/ --output export.jsonl
+python3 maintenance/backup_restore.py restore workspace/ --input backup.tar.gz
+python3 maintenance/backup_restore.py wal-replay workspace/
+```
+
+Full workspace backup, git-friendly JSONL export, selective restore with conflict detection, and WAL replay for crash recovery.
 
 ---
 

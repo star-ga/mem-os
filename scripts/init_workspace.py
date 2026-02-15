@@ -68,6 +68,10 @@ MAINTENANCE_SCRIPTS = [
     "filelock.py",
     "compaction.py",
     "observability.py",
+    "namespaces.py",
+    "conflict_resolver.py",
+    "backup_restore.py",
+    "transcript_capture.py",
 ]
 
 DEFAULT_CONFIG = {
@@ -77,7 +81,7 @@ DEFAULT_CONFIG = {
     "auto_recall": True,
     "self_correcting_mode": "detect_only",
     "recall": {
-        "backend": "tfidf",
+        "backend": "bm25",
     },
     "proposal_budget": {
         "per_run": 3,
