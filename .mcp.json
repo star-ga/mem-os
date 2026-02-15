@@ -1,13 +1,40 @@
 {
   "name": "mem-os",
   "version": "1.0.0",
-  "description": "Persistent, auditable, contradiction-safe memory for coding agents",
+  "description": "Append-only, auditable memory with contradiction detection, namespaces, proposals, BM25 recall. Zero dependencies, git-diffable Markdown. Ideal for OpenClaw/Claude coding agents.",
+  "tags": [
+    "persistent-memory",
+    "governance",
+    "append-only",
+    "contradiction-safe",
+    "audit-trail",
+    "zero-dependencies",
+    "local-first"
+  ],
+  "resources": [
+    "mem-os://decisions",
+    "mem-os://tasks",
+    "mem-os://entities/{type}",
+    "mem-os://signals",
+    "mem-os://contradictions",
+    "mem-os://health",
+    "mem-os://recall/{query}",
+    "mem-os://ledger"
+  ],
+  "tools": [
+    "recall",
+    "propose_update",
+    "approve_apply",
+    "rollback_proposal",
+    "scan",
+    "list_contradictions"
+  ],
+  "transports": ["stdio", "http"],
   "server": {
     "command": "python3",
     "args": ["mcp_server.py"],
     "env": {
       "MEM_OS_WORKSPACE": "."
     }
-  },
-  "transport": "stdio"
+  }
 }

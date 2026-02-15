@@ -1,0 +1,37 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.star-ga/mem-os",
+  "description": "Append-only, auditable memory with contradiction detection, drift analysis, namespaces, proposals, and BM25 recall. Zero dependencies, git-diffable Markdown blocks. Ideal for OpenClaw/Claude coding agents.",
+  "title": "Mem-OS",
+  "websiteUrl": "https://github.com/star-ga/mem-os",
+  "repository": {
+    "url": "https://github.com/star-ga/mem-os",
+    "source": "github"
+  },
+  "version": "1.0.0",
+  "packages": [
+    {
+      "registryType": "pypi",
+      "registryBaseUrl": "https://pypi.org",
+      "identifier": "mem-os",
+      "version": "1.0.0",
+      "runtimeHint": "uvx",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "MEM_OS_WORKSPACE",
+          "description": "Path to the Mem-OS workspace directory",
+          "isRequired": true
+        },
+        {
+          "name": "MEM_OS_TOKEN",
+          "description": "Bearer token for HTTP transport authentication",
+          "isRequired": false,
+          "isSecret": true
+        }
+      ]
+    }
+  ]
+}

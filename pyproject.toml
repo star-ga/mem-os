@@ -42,6 +42,7 @@ mem-os-scan = "mem_os.intel_scan:main"
 mem-os-recall = "mem_os.recall:main"
 mem-os-capture = "mem_os.capture:main"
 mem-os-validate = "mem_os.validate_py:main"
+mem-os-mcp = "mem_os.mcp_entry:main"
 
 [tool.setuptools]
 packages = ["mem_os"]

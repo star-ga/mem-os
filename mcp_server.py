@@ -459,7 +459,8 @@ def _check_token() -> str | None:
     return os.environ.get("MEM_OS_TOKEN")
 
 
-if __name__ == "__main__":
+def main():
+    """Entry point for the MCP server (used by console_scripts and __main__)."""
     import argparse
 
     parser = argparse.ArgumentParser(description="Mem-OS MCP Server")
@@ -483,3 +484,7 @@ if __name__ == "__main__":
         mcp.run(transport="sse", port=args.port)
     else:
         mcp.run()
+
+
+if __name__ == "__main__":
+    main()
