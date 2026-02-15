@@ -147,6 +147,15 @@ class TestCheckSignatureConflictCompeting(unittest.TestCase):
         result = check_signature_conflict(s1, s2)
         self.assertIsNone(result)
 
+    def test_non_exclusive_axis_allows_additive_must(self):
+        """axis.exclusive=false: two must+must with different objects = no conflict."""
+        s1 = {"id": "CS-001", "axis": {"key": "team.hire", "exclusive": False},
+               "modality": "must", "scope": {}, "predicate": "hire", "object": "Alice"}
+        s2 = {"id": "CS-002", "axis": {"key": "team.hire", "exclusive": False},
+               "modality": "must", "scope": {}, "predicate": "hire", "object": "Bob"}
+        result = check_signature_conflict(s1, s2)
+        self.assertIsNone(result, "Non-exclusive axis should allow additive must constraints")
+
 
 class TestDetectContradictions(unittest.TestCase):
     def test_no_active_decisions(self):
@@ -407,6 +416,45 @@ class TestProposalRouting(unittest.TestCase):
                 decisions = f.read()
             self.assertIn("ProposalId:", edits, "Edit proposals should be in EDITS_PROPOSED.md")
             self.assertNotIn("ProposalId:", decisions, "Edit proposals should NOT be in DECISIONS_PROPOSED.md")
+
+
+class TestParserContinuationLines(unittest.TestCase):
+    """Parser should support indented continuation lines for multi-line values."""
+
+    def test_continuation_line_appends(self):
+        """Indented text after a field appends to the value with newline."""
+        text = (
+            "[D-20260215-001]\n"
+            "Status: active\n"
+            "Statement: This is a long rationale\n"
+            "  that continues on the next line\n"
+            "  and even a third line\n"
+            "Tags: test\n"
+        )
+        blocks = parse_file.__wrapped__(text) if hasattr(parse_file, '__wrapped__') else None
+        # Use parse_blocks directly
+        from block_parser import parse_blocks
+        blocks = parse_blocks(text)
+        self.assertEqual(len(blocks), 1)
+        self.assertIn("\n", blocks[0]["Statement"])
+        self.assertIn("continues on the next line", blocks[0]["Statement"])
+        self.assertIn("third line", blocks[0]["Statement"])
+
+
+class TestParserQuotedInlineList(unittest.TestCase):
+    """Parser should handle quoted strings in inline lists."""
+
+    def test_quoted_comma_in_list(self):
+        """Quoted strings preserve commas within values."""
+        from block_parser import _parse_inline_list
+        result = _parse_inline_list('["React, Redux", "Vue"]')
+        self.assertEqual(result, ["React, Redux", "Vue"])
+
+    def test_unquoted_list_unchanged(self):
+        """Regular lists without quotes work as before."""
+        from block_parser import _parse_inline_list
+        result = _parse_inline_list('[a, b, c]')
+        self.assertEqual(result, ["a", "b", "c"])
 
 
 if __name__ == "__main__":

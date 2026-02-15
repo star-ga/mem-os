@@ -279,6 +279,13 @@ def parse_blocks(text):
                 current[current_field].append(indented_item.group(1).strip())
             continue
 
+        # Continuation line: indented text (2+ spaces, not a list item) appends to previous scalar field
+        if current_field and line.startswith("  ") and not line.lstrip().startswith("-"):
+            continuation = line.strip()
+            if continuation and isinstance(current.get(current_field), str):
+                current[current_field] += "\n" + continuation
+                continue
+
         # Blank line: don't break current block
         if line.strip() == "":
             continue
@@ -348,10 +355,26 @@ def _finalize_sig(sig):
 
 
 def _parse_inline_list(s):
-    """Parse [a, b, c] -> ['a', 'b', 'c']."""
+    """Parse [a, b, c] -> ['a', 'b', 'c']. Supports quoted strings for values with commas."""
     inner = s[1:-1].strip()
     if not inner:
         return []
+    # Quote-aware splitting: "value, with comma", other
+    if '"' in inner:
+        items = []
+        current = []
+        in_quotes = False
+        for ch in inner:
+            if ch == '"':
+                in_quotes = not in_quotes
+            elif ch == ',' and not in_quotes:
+                items.append(''.join(current).strip().strip('"'))
+                current = []
+            else:
+                current.append(ch)
+        if current:
+            items.append(''.join(current).strip().strip('"'))
+        return [_coerce_value(x) for x in items if x]
     return [_coerce_value(x.strip()) for x in inner.split(",") if x.strip()]
 
 

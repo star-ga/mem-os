@@ -23,6 +23,7 @@ Body          ::= { Field NewLine }
 Field         ::= Key ":" Space Value
 Key           ::= Letter { Letter | Digit | "_" }
 Value         ::= { AnyChar }                       (* until NewLine *)
+Continuation  ::= Space Space { AnyChar }           (* appends to previous Value with \n *)
 
 (* Typed ID examples *)
 (* D-20260213-001   = Decision                     *)
@@ -122,8 +123,9 @@ Two signatures **contradict** if all of the following hold:
    a. Modality conflict: (must vs must_not) or (must_not vs must) → critical
       Also: (should vs should_not), (should vs must_not), etc → medium/low
    b. Competing requirements: same predicate, different objects,
-      both modality == "must" → critical
+      both modality == "must", and axis.exclusive != false → critical
       (Note: must_not + must_not with different objects is compatible)
+      (Note: axis.exclusive defaults to true; set false for additive constraints)
    c. Preference tension: same predicate, different objects,
       both modality == "should" → warning
 ```

@@ -283,9 +283,14 @@ def check_signature_conflict(sig1, sig2):
     shared_object = sig1.get("object", "").lower() == sig2.get("object", "").lower()
 
     if shared_predicate and not shared_object:
-        # "must X" vs "must Y" = critical (can't satisfy both)
+        # "must X" vs "must Y" = critical only if axis is exclusive (default: true)
         # "must_not X" vs "must_not Y" = compatible (just avoid both)
+        # axis.exclusive: false means additive constraints are valid (e.g., "must hire Alice" + "must hire Bob")
+        axis1 = sig1.get("axis", {})
+        axis_exclusive = axis1.get("exclusive", True)
         if m1 == "must" and m2 == "must":
+            if not axis_exclusive:
+                return None  # Non-exclusive axis: additive constraints are valid
             return {
                 "severity": "critical",
                 "reason": (

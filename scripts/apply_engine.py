@@ -55,6 +55,40 @@ SNAPSHOT_DIRS = [
 SNAPSHOT_FILES = ["AGENTS.md", "MEMORY.md", "IDENTITY.md", "mem-os.json"]
 
 
+def _list_workspace_files(ws):
+    """List all files in workspace (relative paths) for orphan detection."""
+    result = set()
+    for d in SNAPSHOT_DIRS:
+        dirpath = os.path.join(ws, d)
+        if os.path.isdir(dirpath):
+            for root, dirs, files in os.walk(dirpath):
+                for f in files:
+                    result.add(os.path.relpath(os.path.join(root, f), ws))
+    for f in SNAPSHOT_FILES:
+        if os.path.isfile(os.path.join(ws, f)):
+            result.add(f)
+    # Intelligence files (excluding applied/)
+    intel_dir = os.path.join(ws, "intelligence")
+    if os.path.isdir(intel_dir):
+        for root, dirs, files in os.walk(intel_dir):
+            if "applied" in root.split(os.sep):
+                continue
+            for f in files:
+                result.add(os.path.relpath(os.path.join(root, f), ws))
+    return result
+
+
+def _cleanup_orphan_files(ws, pre_apply_files):
+    """Delete files created during a failed transaction (orphan cleanup)."""
+    current_files = _list_workspace_files(ws)
+    orphans = current_files - pre_apply_files
+    for orphan in orphans:
+        path = os.path.join(ws, orphan)
+        if os.path.isfile(path):
+            os.remove(path)
+            print(f"  Cleaned orphan: {orphan}")
+
+
 # ═══════════════════════════════════════════════
 # Path Safety
 # ═══════════════════════════════════════════════
@@ -250,10 +284,10 @@ def create_snapshot(ws, ts):
 
 
 def restore_snapshot(ws, snap_dir):
-    """Restore workspace from snapshot (true rollback: delete + replace).
+    """Restore workspace from snapshot using atomic temp+rename pattern.
 
-    Uses rmtree + copytree to ensure files created during a failed
-    transaction are removed, not just overwritten.
+    For each directory: copy snapshot to temp dir, delete original, rename temp.
+    This ensures that if a crash occurs, the temp copy survives as a recovery point.
     Restores intelligence files individually (skipping intelligence/applied/
     to prevent deleting the snapshot itself).
     """
@@ -261,9 +295,14 @@ def restore_snapshot(ws, snap_dir):
         src = os.path.join(snap_dir, d)
         dst = os.path.join(ws, d)
         if os.path.isdir(src):
+            # Atomic pattern: copy to temp first, then swap
+            tmp_dst = dst + ".rollback_tmp"
+            if os.path.isdir(tmp_dst):
+                shutil.rmtree(tmp_dst)
+            shutil.copytree(src, tmp_dst)
             if os.path.isdir(dst):
                 shutil.rmtree(dst)
-            shutil.copytree(src, dst)
+            os.rename(tmp_dst, dst)
 
     # Restore intelligence files (skip applied/ to avoid deleting active snapshots)
     intel_snap = os.path.join(snap_dir, "intelligence")
@@ -277,9 +316,13 @@ def restore_snapshot(ws, snap_dir):
             if os.path.isfile(src):
                 shutil.copy2(src, dst)
             elif os.path.isdir(src):
+                tmp_dst = dst + ".rollback_tmp"
+                if os.path.isdir(tmp_dst):
+                    shutil.rmtree(tmp_dst)
+                shutil.copytree(src, tmp_dst)
                 if os.path.isdir(dst):
                     shutil.rmtree(dst)
-                shutil.copytree(src, dst)
+                os.rename(tmp_dst, dst)
 
     for f in SNAPSHOT_FILES:
         src = os.path.join(snap_dir, f)
@@ -612,7 +655,7 @@ def _op_supersede_decision(filepath, op):
     sigs = old.get("ConstraintSignatures", [])
     has_invariant = any(s.get("enforcement") == "invariant" for s in sigs)
     if has_invariant:
-        return False, f"supersede_decision: {target} has invariant enforcement (requires Risk=high + /confirm)"
+        return False, f"supersede_decision: {target} has invariant enforcement (manual edit required — invariants cannot be modified by automation)"
 
     # Step 1: Mark old decision as superseded
     ok, msg = _op_update_field(filepath, {"target": target, "field": "Status", "value": "superseded"})
@@ -885,6 +928,8 @@ def apply_proposal(ws, proposal_id, dry_run=False):
     # 3. Create snapshot BEFORE preconditions (O1: snapshot before any mutation)
     ts = datetime.now().strftime("%Y%m%d-%H%M%S")
     print(f"\n--- Creating Snapshot: {ts} ---")
+    # Record pre-apply file listing for orphan detection
+    pre_apply_files = _list_workspace_files(ws)
     snap_dir = create_snapshot(ws, ts)
     print(f"  Snapshot: {snap_dir}")
 
@@ -896,6 +941,7 @@ def apply_proposal(ws, proposal_id, dry_run=False):
     if not ok:
         print("PRECONDITIONS FAILED — rolling back.")
         restore_snapshot(ws, snap_dir)
+        _cleanup_orphan_files(ws, pre_apply_files)
         return False, "Precondition check failed"
 
     receipt_path = write_receipt(snap_dir, proposal, ts, pre_report)
@@ -910,6 +956,7 @@ def apply_proposal(ws, proposal_id, dry_run=False):
         if not ok:
             print(f"\nOP FAILED at step {i} — rolling back.")
             restore_snapshot(ws, snap_dir)
+            _cleanup_orphan_files(ws, pre_apply_files)
             update_receipt(receipt_path, ["ABORTED: op failure"], delta, "rolled_back")
             return False, f"Op {i} failed: {msg}"
         # Track delta
@@ -928,6 +975,7 @@ def apply_proposal(ws, proposal_id, dry_run=False):
     if not ok:
         print("\nPOST-CHECKS FAILED — rolling back.")
         restore_snapshot(ws, snap_dir)
+        _cleanup_orphan_files(ws, pre_apply_files)
         update_receipt(receipt_path, post_report, delta, "rolled_back")
         # Also mark proposal as rolled back
         _mark_proposal_status(source_file, proposal_id, "rolled_back")
