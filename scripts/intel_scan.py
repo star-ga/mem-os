@@ -42,6 +42,8 @@ MODALITY_CONFLICTS = {
     ("must_not", "must"): "critical",
     ("should", "must_not"): "medium",
     ("must_not", "should"): "medium",
+    ("should", "should_not"): "medium",
+    ("should_not", "should"): "medium",
     ("must", "should_not"): "medium",
     ("should_not", "must"): "medium",
     ("may", "must_not"): "low",
@@ -1007,7 +1009,7 @@ def generate_proposals(contradictions, drift_signals, ws, intel_state, report):
             "risk": "high",
             "evidence": c["reason"],
             "ops": [{"op": "set_status", "file": "decisions/DECISIONS.md",
-                      "target": target_dec, "status": "superseded"}],
+                      "target": target_dec, "status": "revoked"}],
             "rollback": "restore_snapshot",
         })
 
