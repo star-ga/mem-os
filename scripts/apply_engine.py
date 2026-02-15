@@ -286,17 +286,22 @@ def restore_snapshot(ws, snap_dir):
 def write_receipt(snap_dir, proposal, ts, pre_checks, status="in_progress"):
     """Write APPLY_RECEIPT.md."""
     receipt_path = os.path.join(snap_dir, "APPLY_RECEIPT.md")
+    ops_desc = ", ".join(op.get("op", "?") for op in proposal.get("Ops", []))
     lines = [
         f"[AR-{ts}]",
-        f"ProposalId: {proposal.get('ProposalId', '?')}",
         f"Date: {datetime.now().strftime('%Y-%m-%d')}",
-        f"Time: {ts}",
-        f"Mode: {_get_mode()}",
+        f"Proposal: {proposal.get('ProposalId', '?')}",
+        f"Action: {ops_desc}",
+        f"Result: {status}",
+        f"Snapshot: {ts}",
         f"Risk: {proposal.get('Risk', '?')}",
         f"TargetBlock: {proposal.get('TargetBlock', '?')}",
         "FilesTouched:",
     ]
-    for f in proposal.get("FilesTouched", []):
+    files_touched = proposal.get("FilesTouched", [])
+    if not files_touched:
+        files_touched = list({op.get("file", "") for op in proposal.get("Ops", []) if op.get("file")})
+    for f in files_touched:
         lines.append(f"- {f}")
     lines.append("PreChecks:")
     for c in pre_checks:

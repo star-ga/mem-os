@@ -310,6 +310,25 @@ grep -hoE '^\[PRJ-[a-z0-9-]+\]$' "$WS/entities/projects.md" 2>/dev/null | tr -d 
 grep -hoE '^\[PER-[a-z0-9-]+\]$' "$WS/entities/people.md" 2>/dev/null | tr -d '[]' | sort -u > "$TMP/ids_per.txt" || true
 grep -hoE '^\[TOOL-[a-z0-9-]+\]$' "$WS/entities/tools.md" 2>/dev/null | tr -d '[]' | sort -u > "$TMP/ids_tool.txt" || true
 
+# S1: Check per-file ID uniqueness
+for idcheck in \
+  "decisions/DECISIONS.md:D-[0-9]{8}-[0-9]{3}" \
+  "tasks/TASKS.md:T-[0-9]{8}-[0-9]{3}" \
+  "entities/incidents.md:INC-[0-9]{8}-[a-z0-9-]+" \
+  "entities/projects.md:PRJ-[a-z0-9-]+" \
+  "entities/people.md:PER-[a-z0-9-]+" \
+  "entities/tools.md:TOOL-[a-z0-9-]+"; do
+  IFS=':' read -r idfile idpat <<< "$idcheck"
+  [[ -f "$WS/$idfile" ]] || continue
+  total_ids=$(grep -coE "^\[$idpat\]$" "$WS/$idfile" 2>/dev/null || echo 0)
+  unique_ids=$(grep -hoE "^\[$idpat\]$" "$WS/$idfile" 2>/dev/null | sort -u | wc -l || echo 0)
+  if [[ "$total_ids" -gt "$unique_ids" ]]; then
+    fail "S1: Duplicate BlockIDs in $idfile ($total_ids total, $unique_ids unique)"
+  elif [[ "$total_ids" -gt 0 ]]; then
+    pass "S1: All BlockIDs unique in $idfile ($total_ids)"
+  fi
+done
+
 # Collect all references across corpus (exclude schema/comment lines starting with >)
 grep -RnE '\b(D-[0-9]{8}-[0-9]{3}|T-[0-9]{8}-[0-9]{3}|INC-[0-9]{8}-[a-z0-9-]+|PRJ-[a-z0-9-]+|PER-[a-z0-9-]+|TOOL-[a-z0-9-]+)\b' \
   "$WS/decisions" "$WS/tasks" "$WS/entities" "$WS/summaries" "$WS/maintenance/MAINTENANCE.md" \
