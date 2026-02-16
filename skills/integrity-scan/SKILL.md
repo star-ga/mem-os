@@ -32,4 +32,4 @@ python3 maintenance/intel_scan.py "${MEM_OS_WORKSPACE:-.}"
 - `detect_only` — Report issues, never propose changes (default)
 - `propose` — Report issues AND generate fix proposals in `intelligence/proposed/`
 
-Check current mode: `cat memory/intel-state.json | python3 -c "import json,sys;print(json.load(sys.stdin)['self_correcting_mode'])"`
+Check current mode: `cat memory/intel-state.json | python3 -c "import json,sys;print(json.load(sys.stdin)['governance_mode'])"`

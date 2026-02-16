@@ -16,7 +16,7 @@ read -r MODE LAST CONTRADICTIONS < <(MEM_OS_STATE="$STATE" python3 -c "
 import json, os, sys
 try:
     d = json.load(open(os.environ['MEM_OS_STATE']))
-    print(d.get('self_correcting_mode', 'unknown'),
+    print(d.get('governance_mode', 'unknown'),
           d.get('last_scan', 'never'),
           d.get('counters', {}).get('contradictions_open', 0))
 except Exception:

@@ -26,6 +26,9 @@ from datetime import datetime, timedelta
 # Import block parser from same directory
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from block_parser import parse_file, parse_blocks, get_by_id
+from filelock import FileLock
+from backup_restore import WAL
+from namespaces import NamespaceManager
 
 
 # ═══════════════════════════════════════════════
@@ -397,10 +400,14 @@ def update_receipt(receipt_path, post_checks, delta, status, diff_text=None):
 
 
 def _get_mode(ws="."):
-    """Read current self_correcting_mode from intel-state.json."""
+    """Read current governance_mode from intel-state.json.
+
+    Supports legacy 'self_correcting_mode' for backward compatibility.
+    """
     try:
         with open(os.path.join(ws, "memory/intel-state.json")) as f:
-            return json.load(f).get("self_correcting_mode", "unknown")
+            state = json.load(f)
+        return state.get("governance_mode", state.get("self_correcting_mode", "unknown"))
     except Exception:
         return "unknown"
 
@@ -855,8 +862,20 @@ def _save_intel_state(ws, state):
 # Main Apply Pipeline
 # ═══════════════════════════════════════════════
 
-def apply_proposal(ws, proposal_id, dry_run=False):
-    """Main apply pipeline. Returns (success, message)."""
+def _get_workspace_lock_path(ws):
+    """Return the path for the workspace-wide apply lock."""
+    return os.path.join(ws, ".mem-os-apply")
+
+
+def apply_proposal(ws, proposal_id, dry_run=False, agent_id=None):
+    """Main apply pipeline. Returns (success, message).
+
+    Args:
+        ws: Workspace path.
+        proposal_id: Proposal ID to apply.
+        dry_run: Validate without executing.
+        agent_id: Optional agent ID for namespace ACL enforcement.
+    """
     print(f"═══ Mem OS Apply Engine v1.0 ═══")
     print(f"Proposal: {proposal_id}")
     print(f"Workspace: {ws}")
@@ -936,7 +955,41 @@ def apply_proposal(ws, proposal_id, dry_run=False):
         print("\nDry run complete. No changes made.")
         return True, "Dry run OK"
 
-    # 3. Create snapshot BEFORE preconditions (O1: snapshot before any mutation)
+    # Namespace ACL check: verify agent has write permission for all target files
+    if agent_id:
+        ns = NamespaceManager(ws, agent_id=agent_id)
+        for op in proposal.get("Ops", []):
+            op_file = op.get("file", "")
+            if op_file and not ns.can_write(op_file):
+                print(f"\nACL DENIED: agent '{agent_id}' cannot write to '{op_file}'")
+                return False, f"ACL denied: agent '{agent_id}' cannot write to '{op_file}'"
+        print(f"  ACL: PASS (agent '{agent_id}' has write access)")
+
+    # Acquire workspace-wide lock to prevent concurrent applies
+    lock_path = _get_workspace_lock_path(ws)
+    lock = FileLock(lock_path, timeout=30.0)
+    try:
+        lock.acquire()
+    except Exception as e:
+        print(f"\nERROR: Could not acquire workspace lock: {e}")
+        return False, f"Workspace lock timeout: {e}"
+
+    try:
+        return _apply_proposal_locked(ws, proposal, proposal_id, source_file, lock)
+    finally:
+        lock.release()
+
+
+def _apply_proposal_locked(ws, proposal, proposal_id, source_file, lock):
+    """Execute the apply pipeline while holding the workspace lock."""
+
+    # 3. Replay WAL from any prior crash BEFORE snapshotting (ensures clean state)
+    wal = WAL(ws)
+    replayed = wal.replay()
+    if replayed:
+        print(f"\n  WAL: Replayed {replayed} pending entry(ies) from prior crash")
+
+    # 4. Create snapshot AFTER WAL recovery (O1: snapshot before any mutation)
     ts = datetime.now().strftime("%Y%m%d-%H%M%S")
     print(f"\n--- Creating Snapshot: {ts} ---")
     # Record pre-apply file listing for orphan detection
@@ -944,7 +997,7 @@ def apply_proposal(ws, proposal_id, dry_run=False):
     snap_dir = create_snapshot(ws, ts)
     print(f"  Snapshot: {snap_dir}")
 
-    # 4. Check preconditions (may run validate.sh + intel_scan.py which write reports)
+    # 5. Check preconditions (may run validate.sh + intel_scan.py which write reports)
     print("\n--- Precondition Checks ---")
     ok, pre_report = check_preconditions(ws)
     for r in pre_report:
@@ -958,18 +1011,41 @@ def apply_proposal(ws, proposal_id, dry_run=False):
     receipt_path = write_receipt(snap_dir, proposal, ts, pre_report)
     print(f"  Receipt: {receipt_path}")
 
-    # 5. Execute ops
-    print(f"\n--- Executing {len(proposal.get('Ops', []))} Ops ---")
+    # 6. Execute ops with WAL protection
+
+    print(f"\n--- Executing {len(proposal.get('Ops', []))} Ops (WAL-protected) ---")
     delta = {"created": [], "modified": []}
+    wal_entries = []  # Track WAL entries for this apply
     for i, op in enumerate(proposal.get("Ops", [])):
+        raw_file = op.get("file", "")
+        try:
+            filepath = _safe_resolve(ws, raw_file)
+        except ValueError:
+            filepath = raw_file
+
+        # WAL: log intention before mutation
+        wal_id = wal.begin(
+            operation=op.get("op", "unknown"),
+            target_path=filepath,
+            content=json.dumps(op, default=str),
+        )
+        wal_entries.append(wal_id)
+
         ok, msg = execute_op(ws, op)
         print(f"  [{i}] {op.get('op')}: {msg}")
         if not ok:
+            # WAL: rollback this failed op's WAL entry
+            wal.rollback(wal_id)
             print(f"\nOP FAILED at step {i} — rolling back.")
+            # Also rollback any previously committed WAL entries via snapshot
             restore_snapshot(ws, snap_dir)
             _cleanup_orphan_files(ws, pre_apply_files)
             update_receipt(receipt_path, ["ABORTED: op failure"], delta, "rolled_back")
             return False, f"Op {i} failed: {msg}"
+
+        # WAL: commit successful op
+        wal.commit(wal_id)
+
         # Track delta
         target = op.get("target", "")
         if op.get("op") in ("append_block", "insert_after_block", "supersede_decision"):

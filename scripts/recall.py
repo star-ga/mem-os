@@ -348,8 +348,17 @@ def build_xref_graph(all_blocks: list[dict]) -> dict[str, set[str]]:
     return graph
 
 
-def recall(workspace: str, query: str, limit: int = 10, active_only: bool = False, graph_boost: bool = False) -> list[dict]:
-    """Search across all memory files using BM25 scoring. Returns ranked results."""
+def recall(workspace: str, query: str, limit: int = 10, active_only: bool = False, graph_boost: bool = False, agent_id: str | None = None) -> list[dict]:
+    """Search across all memory files using BM25 scoring. Returns ranked results.
+
+    Args:
+        workspace: Workspace root path.
+        query: Search query.
+        limit: Max results to return.
+        active_only: Only return blocks with active status.
+        graph_boost: Enable cross-reference neighbor boosting.
+        agent_id: Optional agent ID for namespace ACL filtering.
+    """
     query_tokens = tokenize(query)
     if not query_tokens:
         return []
@@ -357,9 +366,22 @@ def recall(workspace: str, query: str, limit: int = 10, active_only: bool = Fals
     # Query expansion: add domain synonyms
     query_tokens = expand_query(query_tokens)
 
+    # Namespace ACL: resolve accessible paths if agent_id is provided
+    ns_manager = None
+    if agent_id:
+        try:
+            from namespaces import NamespaceManager
+            ns_manager = NamespaceManager(workspace, agent_id=agent_id)
+        except ImportError:
+            pass
+
     # Load all blocks with source file tracking
     all_blocks = []
     for label, rel_path in CORPUS_FILES.items():
+        # ACL check: skip files the agent cannot read
+        if ns_manager and not ns_manager.can_read(rel_path):
+            continue
+
         path = os.path.join(workspace, rel_path)
         if not os.path.isfile(path):
             continue
@@ -373,6 +395,27 @@ def recall(workspace: str, query: str, limit: int = 10, active_only: bool = Fals
             b["_source_file"] = rel_path
             b["_source_label"] = label
             all_blocks.append(b)
+
+    # If agent has namespace, also search agent-private corpus files
+    if ns_manager and agent_id:
+        agent_ns = f"agents/{agent_id}"
+        for label, rel_path in CORPUS_FILES.items():
+            ns_path = os.path.join(agent_ns, rel_path)
+            full_path = os.path.join(workspace, ns_path)
+            if not os.path.isfile(full_path):
+                continue
+            if not ns_manager.can_read(ns_path):
+                continue
+            try:
+                blocks = parse_file(full_path)
+            except (OSError, UnicodeDecodeError, ValueError):
+                continue
+            if active_only:
+                blocks = get_active(blocks)
+            for b in blocks:
+                b["_source_file"] = ns_path
+                b["_source_label"] = f"{label}@{agent_id}"
+                all_blocks.append(b)
 
     if not all_blocks:
         return []

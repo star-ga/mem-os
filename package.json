@@ -2,7 +2,7 @@
   "name": "mem-os",
   "version": "1.0.0",
   "private": false,
-  "description": "Memory + Immune System for AI agents — local-first, auditable, self-correcting",
+  "description": "Memory + Immune System for AI agents — local-first, auditable, governance-aware",
   "author": "STARGA Inc <noreply@star.ga>",
   "license": "MIT",
   "repository": {
@@ -17,7 +17,7 @@
     "intelligence",
     "contradiction-detection",
     "drift-analysis",
-    "self-correcting",
+    "governance-aware",
     "claude-code-plugin"
   ],
   "engines": {

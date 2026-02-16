@@ -232,7 +232,7 @@ class TestMCPApproveApply(unittest.TestCase):
 
         # Create mem-os.json with detect_only mode (blocks apply)
         with open(os.path.join(self.td, "mem-os.json"), "w") as f:
-            json.dump({"self_correcting_mode": "detect_only"}, f)
+            json.dump({"governance_mode": "detect_only"}, f)
 
         # Create empty proposed files
         for name in ("DECISIONS_PROPOSED.md", "TASKS_PROPOSED.md", "EDITS_PROPOSED.md"):

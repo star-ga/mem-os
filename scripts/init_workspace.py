@@ -79,7 +79,7 @@ DEFAULT_CONFIG = {
     "workspace_path": ".",
     "auto_capture": True,
     "auto_recall": True,
-    "self_correcting_mode": "detect_only",
+    "governance_mode": "detect_only",
     "recall": {
         "backend": "bm25",
     },

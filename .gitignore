@@ -15,6 +15,7 @@ benchmarks/.cache/
 benchmarks/locomo_results.json
 benchmarks/locomo_judge_results.json
 benchmarks/*.partial
+benchmarks/*.jsonl
 
 # Workspace artifacts (not part of repo)
 /maintenance/

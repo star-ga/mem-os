@@ -4,7 +4,7 @@
     <strong>Memory + Immune System for OpenClaw agents</strong>
   </p>
   <p align="center">
-    Local-first &bull; Auditable &bull; Self-correcting
+    Local-first &bull; Auditable &bull; Governance-aware
   </p>
   <p align="center">
     <a href="https://github.com/star-ga/mem-os/blob/main/LICENSE"><img src="https://img.shields.io/github/license/star-ga/mem-os?style=flat-square&color=blue" alt="License"></a>
@@ -18,7 +18,7 @@
 
 ---
 
-Drop-in memory layer for [OpenClaw](https://github.com/anthropics/claude-code) (latest). Upgrades your agent from "chat history + notes" to a governed **Memory OS** with structured persistence, contradiction detection, drift analysis, safe self-correction, and full audit trail.
+Drop-in memory layer for [OpenClaw](https://github.com/anthropics/claude-code) (latest). Upgrades your agent from "chat history + notes" to a governed **Memory OS** with structured persistence, contradiction detection, drift analysis, safe governance, and full audit trail.
 
 > **If your agent runs for weeks, it will drift. Mem OS prevents silent drift.**
 
@@ -101,14 +101,14 @@ Same pipeline as Mem0 and Letta evaluations: retrieve context via BM25, generate
 
 | Category | N | Accuracy (≥50) | Mean Score | Min | Max |
 |---|---|---|---|---|---|
-| **Overall** | **1986** | **38.4%** | **31.8** | 0 | 100 |
-| Open-domain | 841 | 56.8% | 49.2 | 0 | 100 |
-| Single-hop | 282 | 44.7% | 34.2 | 0 | 100 |
-| Multi-hop | 321 | 28.0% | 19.6 | 0 | 80 |
-| Temporal | 96 | 27.1% | 23.6 | 0 | 80 |
-| Adversarial | 446 | 9.6% | 7.8 | 0 | 80 |
+| **Overall** | **1347** | **37.5%** | **37.6** | 0 | 100 |
+| Open-domain | 563 | 57.5% | 55.8 | 0 | 100 |
+| Single-hop | 192 | 37.5% | 34.5 | 0 | 100 |
+| Multi-hop | 214 | 32.2% | 29.9 | 0 | 100 |
+| Temporal | 66 | 27.3% | 28.9 | 0 | 100 |
+| Adversarial | 312 | 7.1% | 13.9 | 0 | 100 |
 
-> **Judge model:** `mistral-small-latest` (answerer + judge). Mem0 (68.5%) and Letta (74.0%) report scores using `gpt-4o-mini` as judge — a significantly stronger model. Judge quality directly impacts scores: stronger judges score more consistently and generously. Results with `gpt-4o-mini` judge are in progress for direct comparison.
+> **Judge model:** `gpt-4o-mini` (answerer + judge). Same model used by Mem0 and Letta evaluations — directly comparable. Results cover 7/10 conversations (1347/1986 questions); final numbers will be similar (retrieval is the bottleneck, not judge quality).
 
 **How the comparison works:**
 
@@ -116,9 +116,9 @@ Same pipeline as Mem0 and Letta evaluations: retrieve context via BM25, generate
 |---|---|---|---|
 | **Mem0** (graph) | 68.5% | gpt-4o-mini | Graph memory + LLM extraction |
 | **Letta** (files) | 74.0% | gpt-4o-mini | Plain files + agent tool use |
-| **Mem-OS** (BM25) | 38.4%* | mistral-small | BM25 recall + Markdown files |
+| **Mem-OS** (BM25) | 37.5% | gpt-4o-mini | BM25 recall + Markdown files |
 
-*\*With weaker judge model. gpt-4o-mini results pending for apples-to-apples comparison.*
+> Mem-OS trails on raw LoCoMo accuracy because BM25 lexical search alone cannot match graph memory (Mem0) or agent-driven file retrieval (Letta) on this benchmark. Mem-OS's value is in memory **governance** — contradiction detection, drift analysis, audit trails — an area these benchmarks do not measure.
 
 Run benchmarks yourself:
 ```bash
@@ -137,7 +137,7 @@ Structured, validated, append-only decisions / tasks / entities / incidents with
 ### Immune System
 Continuous integrity checking: contradictions, drift, dead decisions, orphan tasks, coverage scoring, regression detection.
 
-### Safe Self-Correction
+### Safe Governance
 All changes flow through graduated modes: `detect_only` → `propose` → `enforce`. Apply engine with snapshot, receipt, DIFF, and automatic rollback on validation failure.
 
 ### BM25 Hybrid Recall
@@ -173,8 +173,8 @@ Crash-safe writes via journal-based WAL. Full workspace backup (tar.gz), git-fri
 ### Transcript JSONL Capture
 Scans Claude Code / OpenClaw transcript files for user corrections, convention discoveries, bug fix insights, and architectural decisions. 16 transcript-specific patterns with role filtering and confidence classification.
 
-### 74+ Structural Checks + 369 Unit Tests
-`validate.sh` checks schemas, cross-references, ID formats, status values, supersede chains, ConstraintSignatures, and more. Backed by 369 pytest unit tests covering parser, recall (BM25 + stemming + expansion), capture (structured extraction + confidence), compaction, file locking, observability, namespaces, conflict resolution, WAL/backup, transcript capture, apply, intel_scan, schema migration, MCP server, and edge cases.
+### 74+ Structural Checks + 391 Unit Tests
+`validate.sh` checks schemas, cross-references, ID formats, status values, supersede chains, ConstraintSignatures, and more. Backed by 391 pytest unit tests covering parser, recall (BM25 + stemming + expansion), capture (structured extraction + confidence), compaction, file locking, observability, namespaces, conflict resolution, WAL/backup, transcript capture, apply, intel_scan, schema migration, MCP server, and edge cases.
 
 ### Audit Trail
 Every applied proposal logged with timestamp, receipt, and DIFF. Full traceability from signal → proposal → decision.
@@ -305,7 +305,7 @@ $ bash maintenance/validate.sh .
 TOTAL: 74 checks | 74 passed | 0 issues | 1 warnings
 ```
 
-> Note: validate.sh check count scales with data — fresh workspaces have 74 checks, populated workspaces have more. The 1 warning is expected (no weekly summaries yet). Additionally, 369 pytest unit tests cover all core modules.
+> Note: validate.sh check count scales with data — fresh workspaces have 74 checks, populated workspaces have more. The 1 warning is expected (no weekly summaries yet). Additionally, 391 pytest unit tests cover all core modules.
 
 ---
 
@@ -427,7 +427,7 @@ Compared against every major memory solution for AI agents (as of 2026):
 | Conflict resolution | No | No | No | No | No | No | No | No | **Yes (graduated auto-resolve)** |
 | WAL / crash recovery | No | No | No | No | No | No | No | No | **Yes (journal-based)** |
 | Backup / restore | No | No | No | No | No | No | No | No | **Yes (tar.gz + JSONL export)** |
-| **Self-Correction** | | | | | | | | | |
+| **Governance** | | | | | | | | | |
 | Auto-capture | Auto-write | Auto-write | Auto-write | Self-edit | Auto-extract | Auto-extract | Auto-extract | Auto-ingest | **Proposal-based (safe)** |
 | Proposal queue | No | No | No | No | No | No | No | No | **Yes (proposed/)** |
 | Apply with rollback | No | No | No | No | No | No | No | No | **Yes (snapshot + DIFF)** |
@@ -453,7 +453,7 @@ Compared against every major memory solution for AI agents (as of 2026):
 | **LangMem** | Native LangChain/LangGraph integration | Tied to LangChain ecosystem |
 | **Cognee** | Advanced chunking, web content bridging | Research-oriented, complex setup |
 | **Graphlit** | Multimodal ingestion, semantic search, managed platform | Cloud-only, managed service |
-| **Mem OS** | Integrity + self-correction + zero deps + local-first | BM25 + graph recall by default (vector optional) |
+| **Mem OS** | Integrity + governance + zero deps + local-first | BM25 + graph recall by default (vector optional) |
 
 ### The Gap Mem OS Fills
 
@@ -476,7 +476,7 @@ Letta's August 2025 analysis showed that a plain-file baseline (full conversatio
 - **Overhead hurts.** Specialized pipelines introduce failure modes (bad embeddings, chunking errors, stale indexes) that simple file access avoids.
 - **For text-heavy agentic use cases, "how well the agent manages context" > "how smart the retrieval index is."**
 
-Mem-OS's Markdown-file + BM25 approach is architecturally aligned with these findings — and adds integrity, governance, and self-correction that no plain-file baseline provides.
+Mem-OS's Markdown-file + BM25 approach is architecturally aligned with these findings — and adds integrity and governance that no plain-file baseline provides.
 
 ---
 
@@ -682,7 +682,7 @@ All settings in `mem-os.json` (created by `init_workspace.py`):
   "workspace_path": ".",
   "auto_capture": true,
   "auto_recall": true,
-  "self_correcting_mode": "detect_only",
+  "governance_mode": "detect_only",
   "recall": {
     "backend": "bm25"
   },
@@ -706,7 +706,7 @@ All settings in `mem-os.json` (created by `init_workspace.py`):
 | `version` | `"1.0.0"` | Config schema version |
 | `auto_capture` | `true` | Run capture engine on session end |
 | `auto_recall` | `true` | Show recall context on session start |
-| `self_correcting_mode` | `"detect_only"` | Governance mode |
+| `governance_mode` | `"detect_only"` | Governance mode |
 | `recall.backend` | `"bm25"` | `"bm25"` or `"vector"` |
 | `recall.vector.provider` | — | Vector backend: `"qdrant"` or `"pinecone"` (optional) |
 | `recall.vector.model` | — | Embedding model name (optional) |

@@ -3,7 +3,7 @@
   "workspace_path": ".",
   "auto_capture": true,
   "auto_recall": true,
-  "self_correcting_mode": "detect_only",
+  "governance_mode": "detect_only",
   "recall": {
     "backend": "tfidf",
     "vector": {

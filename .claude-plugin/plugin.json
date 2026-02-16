@@ -1,7 +1,7 @@
 {
   "name": "mem-os",
   "version": "1.0.0",
-  "description": "Memory + Immune System for AI agents — local-first, auditable, self-correcting",
+  "description": "Memory + Immune System for AI agents — local-first, auditable, governance-aware",
   "author": {
     "name": "STARGA Inc",
     "url": "https://star.ga"
@@ -16,6 +16,6 @@
     "intelligence",
     "contradiction-detection",
     "drift-analysis",
-    "self-correcting"
+    "governance-aware"
   ]
 }

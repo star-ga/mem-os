@@ -24,7 +24,7 @@ from observability import get_logger
 
 _log = get_logger("schema_version")
 
-CURRENT_SCHEMA_VERSION = "2.0.0"
+CURRENT_SCHEMA_VERSION = "2.1.0"
 
 # Ordered list of migrations. Each entry is (from_version, to_version, description, callable).
 # Migrations are applied in order; each must be idempotent.
@@ -130,14 +130,56 @@ def _migrate_v1_to_v2(workspace: str) -> None:
         except (json.JSONDecodeError, OSError):
             config = {}
 
-    config["schema_version"] = CURRENT_SCHEMA_VERSION
+    config["schema_version"] = "2.0.0"
     with open(config_path, "w", encoding="utf-8") as f:
         json.dump(config, f, indent=2)
         f.write("\n")
 
 
+def _migrate_v2_to_v21(workspace: str) -> None:
+    """v2.0 -> v2.1: rename self_correcting_mode to governance_mode.
+
+    Backfill script for workspaces created before the terminology change.
+    Idempotent: skips if governance_mode already present.
+    """
+    # Migrate mem-os.json
+    config_path = os.path.join(workspace, "mem-os.json")
+    if os.path.isfile(config_path):
+        try:
+            with open(config_path, "r", encoding="utf-8") as f:
+                config = json.load(f)
+            changed = False
+            if "self_correcting_mode" in config and "governance_mode" not in config:
+                config["governance_mode"] = config.pop("self_correcting_mode")
+                changed = True
+            if config.get("schema_version") != "2.1.0":
+                config["schema_version"] = "2.1.0"
+                changed = True
+            if changed:
+                with open(config_path, "w", encoding="utf-8") as f:
+                    json.dump(config, f, indent=2)
+                    f.write("\n")
+        except (json.JSONDecodeError, OSError):
+            pass
+
+    # Migrate intel-state.json
+    state_path = os.path.join(workspace, "memory", "intel-state.json")
+    if os.path.isfile(state_path):
+        try:
+            with open(state_path, "r", encoding="utf-8") as f:
+                state = json.load(f)
+            if "self_correcting_mode" in state and "governance_mode" not in state:
+                state["governance_mode"] = state.pop("self_correcting_mode")
+                with open(state_path, "w", encoding="utf-8") as f:
+                    json.dump(state, f, indent=2)
+                    f.write("\n")
+        except (json.JSONDecodeError, OSError):
+            pass
+
+
 # Register migrations in order
 _MIGRATIONS.append(("1.0.0", "2.0.0", "Add intelligence/proposed/, shared/, and schema_version", _migrate_v1_to_v2))
+_MIGRATIONS.append(("2.0.0", "2.1.0", "Rename self_correcting_mode to governance_mode", _migrate_v2_to_v21))
 
 
 # ---------------------------------------------------------------------------

@@ -363,7 +363,7 @@ class TestModeGate(unittest.TestCase):
             state_path = os.path.join(ws, "memory/intel-state.json")
             with open(state_path) as f:
                 state = json.load(f)
-            state["self_correcting_mode"] = "propose"
+            state["governance_mode"] = "propose"
             with open(state_path, "w") as f:
                 json.dump(state, f)
             ok, msg = apply_proposal(ws, "P-20260214-999", dry_run=False)

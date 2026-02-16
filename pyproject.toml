@@ -1,14 +1,14 @@
 [project]
 name = "mem-os"
 version = "1.0.0"
-description = "Memory + Immune System for AI agents — local-first, auditable, self-correcting"
+description = "Memory + Immune System for AI agents — local-first, auditable, governance-aware"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.8"
 authors = [
     { name = "STARGA Inc", email = "noreply@star.ga" }
 ]
-keywords = ["memory", "ai-agent", "integrity", "recall", "intelligence", "contradiction-detection", "drift-analysis", "self-correcting"]
+keywords = ["memory", "ai-agent", "integrity", "recall", "intelligence", "contradiction-detection", "drift-analysis", "governance-aware"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
@@ -43,6 +43,10 @@ mem-os-recall = "mem_os.recall:main"
 mem-os-capture = "mem_os.capture:main"
 mem-os-validate = "mem_os.validate_py:main"
 mem-os-mcp = "mem_os.mcp_entry:main"
+mem-os-migrate = "mem_os.schema_version:main"
+mem-os-backup = "mem_os.backup_restore:main"
+mem-os-compact = "mem_os.compaction:main"
+mem-os-resolve = "mem_os.conflict_resolver:main"
 
 [tool.setuptools]
 packages = ["mem_os"]

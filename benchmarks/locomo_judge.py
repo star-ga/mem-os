@@ -101,26 +101,34 @@ PROVIDER_CONFIG = {
     "gpt": {
         "base_url": "https://api.openai.com/v1/chat/completions",
         "key_env": "OPENAI_API_KEY",
+        "format": "openai",
     },
     "mistral": {
         "base_url": "https://api.mistral.ai/v1/chat/completions",
         "key_env": "MISTRAL_API_KEY",
+        "format": "openai",
     },
     "ministral": {
         "base_url": "https://api.mistral.ai/v1/chat/completions",
         "key_env": "MISTRAL_API_KEY",
+        "format": "openai",
+    },
+    "claude": {
+        "base_url": "https://api.anthropic.com/v1/messages",
+        "key_env": "ANTHROPIC_API_KEY",
+        "format": "anthropic",
     },
 }
 
 
-def _resolve_provider(model: str) -> tuple[str, str]:
-    """Resolve API base URL and key from model name prefix."""
+def _resolve_provider(model: str) -> tuple[str, str, str]:
+    """Resolve API base URL, key, and format from model name prefix."""
     for prefix, cfg in PROVIDER_CONFIG.items():
         if model.startswith(prefix):
             key = os.environ.get(cfg["key_env"], "")
             if not key:
                 raise RuntimeError(f"{cfg['key_env']} not set for model {model}")
-            return cfg["base_url"], key
+            return cfg["base_url"], key, cfg["format"]
     raise RuntimeError(f"Unknown model provider for: {model}")
 
 
@@ -131,36 +139,61 @@ def _llm_chat(
     max_tokens: int = 512,
     max_retries: int = 3,
 ) -> str:
-    """Call LLM chat completions API (OpenAI-compatible). Returns content.
+    """Call LLM chat completions API. Supports OpenAI-compatible and Anthropic formats.
 
     Retries on transient errors (429, 5xx, timeouts) with exponential backoff.
     """
-    base_url, api_key = _resolve_provider(model)
+    base_url, api_key, fmt = _resolve_provider(model)
 
-    payload = {
-        "model": model,
-        "messages": messages,
-        "temperature": temperature,
-        "max_tokens": max_tokens,
-    }
+    if fmt == "anthropic":
+        # Extract system message if present
+        system_text = ""
+        user_messages = []
+        for m in messages:
+            if m["role"] == "system":
+                system_text = m["content"]
+            else:
+                user_messages.append(m)
+        payload = {
+            "model": model,
+            "max_tokens": max_tokens,
+            "messages": user_messages,
+        }
+        if system_text:
+            payload["system"] = system_text
+        if temperature > 0:
+            payload["temperature"] = temperature
+        headers = {
+            "Content-Type": "application/json",
+            "x-api-key": api_key,
+            "anthropic-version": "2023-06-01",
+        }
+    else:
+        # gpt-5.x requires max_completion_tokens instead of max_tokens
+        tokens_key = "max_completion_tokens" if model.startswith("gpt-5") else "max_tokens"
+        payload = {
+            "model": model,
+            "messages": messages,
+            "temperature": temperature,
+            tokens_key: max_tokens,
+        }
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}",
+        }
 
     data = json.dumps(payload).encode("utf-8")
 
     for attempt in range(max_retries):
         try:
-            req = urllib.request.Request(
-                base_url,
-                data=data,
-                headers={
-                    "Content-Type": "application/json",
-                    "Authorization": f"Bearer {api_key}",
-                },
-            )
+            req = urllib.request.Request(base_url, data=data, headers=headers)
             with urllib.request.urlopen(req, timeout=120) as resp:
                 result = json.loads(resp.read().decode("utf-8"))
+            if fmt == "anthropic":
+                return result["content"][0]["text"].strip()
             return result["choices"][0]["message"]["content"].strip()
         except urllib.error.HTTPError as e:
-            if e.code in (429, 500, 502, 503, 504) and attempt < max_retries - 1:
+            if e.code in (429, 500, 502, 503, 504, 529) and attempt < max_retries - 1:
                 wait = 2 ** (attempt + 1)
                 print(f"  [retry] HTTP {e.code}, waiting {wait}s...")
                 time.sleep(wait)

@@ -119,7 +119,7 @@ def load_intel_state(ws):
     if os.path.exists(path):
         with open(path) as f:
             return json.load(f)
-    return {"self_correcting_mode": "detect_only", "counters": {}}
+    return {"governance_mode": "detect_only", "counters": {}}
 
 
 def save_intel_state(ws, state):
@@ -1178,7 +1178,7 @@ def main():
 
     # Load state
     intel_state = load_intel_state(ws)
-    mode = intel_state.get("self_correcting_mode", "detect_only")
+    mode = intel_state.get("governance_mode", "detect_only")
     report.lines.append(f"Mode: {mode}")
 
     # Load all data
