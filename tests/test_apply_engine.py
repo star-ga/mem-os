@@ -528,6 +528,104 @@ class TestSnapshotRecursionPrevention(unittest.TestCase):
                             "intelligence/ dir should exist in snapshot")
 
 
+class TestMinimalSnapshot(unittest.TestCase):
+    """Tests for files_touched-based minimal snapshots."""
+
+    def test_minimal_snapshot_only_copies_touched_files(self):
+        """When files_touched is provided, only those files + config are snapshotted."""
+        from apply_engine import create_snapshot
+        with tempfile.TemporaryDirectory() as ws:
+            from init_workspace import init
+            init(ws)
+
+            # Write to multiple files
+            with open(os.path.join(ws, "decisions", "DECISIONS.md"), "w") as f:
+                f.write("[D-001]\nStatement: Test\nStatus: active\n")
+            with open(os.path.join(ws, "tasks", "TASKS.md"), "w") as f:
+                f.write("[T-001]\nTitle: Task\nStatus: open\n")
+
+            # Minimal snapshot: only touch decisions
+            snap_dir = create_snapshot(ws, "20260217-120000",
+                                       files_touched=["decisions/DECISIONS.md"])
+
+            # Decisions file should exist in snapshot
+            self.assertTrue(os.path.isfile(
+                os.path.join(snap_dir, "decisions", "DECISIONS.md")
+            ))
+            # Tasks should NOT be in snapshot (wasn't in files_touched)
+            self.assertFalse(os.path.exists(
+                os.path.join(snap_dir, "tasks", "TASKS.md")
+            ))
+            # Config files always snapshotted
+            self.assertTrue(os.path.isfile(
+                os.path.join(snap_dir, "mem-os.json")
+            ))
+
+    def test_full_snapshot_when_no_files_touched(self):
+        """When files_touched is None, full snapshot is created."""
+        from apply_engine import create_snapshot
+        with tempfile.TemporaryDirectory() as ws:
+            from init_workspace import init
+            init(ws)
+            with open(os.path.join(ws, "decisions", "DECISIONS.md"), "w") as f:
+                f.write("[D-001]\nStatement: Test\nStatus: active\n")
+
+            snap_dir = create_snapshot(ws, "20260217-120001", files_touched=None)
+
+            # Full snapshot should include entire decisions directory
+            self.assertTrue(os.path.isfile(
+                os.path.join(snap_dir, "decisions", "DECISIONS.md")
+            ))
+
+    def test_safe_copy_makes_independent_copy(self):
+        """_safe_copy must create an independent copy (not hardlink).
+
+        Hardlinks are unsafe for mutable-file snapshots — open("w") truncates
+        the inode in-place, corrupting both files.
+        """
+        from apply_engine import _safe_copy
+        with tempfile.TemporaryDirectory() as td:
+            src = os.path.join(td, "source.md")
+            dst = os.path.join(td, "dest.md")
+            with open(src, "w") as f:
+                f.write("original content")
+            _safe_copy(src, dst)
+            self.assertTrue(os.path.isfile(dst))
+            # Modify source — dst must remain unchanged
+            with open(src, "w") as f:
+                f.write("modified content")
+            with open(dst) as f:
+                self.assertEqual(f.read(), "original content")
+
+    def test_safe_copy_creates_parent_dirs(self):
+        """_safe_copy should create intermediate directories."""
+        from apply_engine import _safe_copy
+        with tempfile.TemporaryDirectory() as td:
+            src = os.path.join(td, "source.md")
+            dst = os.path.join(td, "deep", "nested", "dest.md")
+            with open(src, "w") as f:
+                f.write("test")
+            _safe_copy(src, dst)
+            self.assertTrue(os.path.isfile(dst))
+
+    def test_minimal_snapshot_preserves_content(self):
+        """Snapshot content must match original."""
+        from apply_engine import create_snapshot
+        with tempfile.TemporaryDirectory() as ws:
+            from init_workspace import init
+            init(ws)
+            original = "[D-001]\nStatement: PostgreSQL\nStatus: active\n"
+            with open(os.path.join(ws, "decisions", "DECISIONS.md"), "w") as f:
+                f.write(original)
+
+            snap_dir = create_snapshot(ws, "20260217-120002",
+                                       files_touched=["decisions/DECISIONS.md"])
+
+            with open(os.path.join(snap_dir, "decisions", "DECISIONS.md")) as f:
+                snapped = f.read()
+            self.assertEqual(snapped, original)
+
+
 class TestDeferredCooldown(unittest.TestCase):
     """Deferred/rejected proposals have a cooldown period before re-proposal."""
 

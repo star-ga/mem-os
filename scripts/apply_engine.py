@@ -248,43 +248,71 @@ def check_preconditions(ws):
 # Snapshot & Rollback
 # ═══════════════════════════════════════════════
 
-def create_snapshot(ws, ts):
+def _safe_copy(src, dst):
+    """Copy a file for snapshot purposes. Always uses copy2 (not hardlinks).
+
+    Hardlinks are unsuitable for mutable-file snapshots because Python's
+    open("w") truncates the inode in-place, corrupting both the workspace
+    file and its hardlinked snapshot copy. A true copy ensures the snapshot
+    preserves the original content after the workspace file is modified.
+    """
+    os.makedirs(os.path.dirname(dst), exist_ok=True)
+    shutil.copy2(src, dst)
+
+
+def create_snapshot(ws, ts, files_touched=None):
     """Create a pre-apply snapshot for rollback.
 
-    Copies workspace state for rollback. The intelligence/applied/ directory
-    is excluded to prevent recursive nesting (snapshots containing snapshots).
-    Intelligence files (SIGNALS.md, CONTRADICTIONS.md, etc.) are copied
-    individually instead.
+    When files_touched is provided (list of relative paths from the proposal's
+    FilesTouched field), only those files are snapshotted — O(touched) instead
+    of O(workspace). Falls back to full snapshot when files_touched is empty
+    or None.
+
+    The intelligence/applied/ directory is always excluded to prevent recursive
+    nesting (snapshots containing snapshots).
     """
     snap_dir = os.path.join(ws, "intelligence/applied", ts)
     os.makedirs(snap_dir, exist_ok=True)
 
-    for d in SNAPSHOT_DIRS:
-        src = os.path.join(ws, d)
-        dst = os.path.join(snap_dir, d)
-        if os.path.isdir(src):
-            shutil.copytree(src, dst, dirs_exist_ok=True)
+    if files_touched:
+        # Minimal snapshot: only snapshot files the proposal will modify
+        for rel_path in files_touched:
+            src = os.path.join(ws, rel_path)
+            if os.path.isfile(src):
+                _safe_copy(src, os.path.join(snap_dir, rel_path))
+        # Always snapshot config files (needed for rollback integrity)
+        for f in SNAPSHOT_FILES:
+            src = os.path.join(ws, f)
+            if os.path.isfile(src):
+                _safe_copy(src, os.path.join(snap_dir, f))
+    else:
+        # Full snapshot: copy all directories
+        for d in SNAPSHOT_DIRS:
+            src = os.path.join(ws, d)
+            dst = os.path.join(snap_dir, d)
+            if os.path.isdir(src):
+                shutil.copytree(src, dst, dirs_exist_ok=True)
 
-    # Copy intelligence files individually (NOT recursively) to avoid
-    # snapshotting intelligence/applied/ into itself
-    intel_src = os.path.join(ws, "intelligence")
-    intel_dst = os.path.join(snap_dir, "intelligence")
-    os.makedirs(intel_dst, exist_ok=True)
-    if os.path.isdir(intel_src):
-        for item in os.listdir(intel_src):
-            src_path = os.path.join(intel_src, item)
-            dst_path = os.path.join(intel_dst, item)
-            if item == "applied":
-                continue  # Skip to prevent recursive nesting
-            if os.path.isfile(src_path):
-                shutil.copy2(src_path, dst_path)
-            elif os.path.isdir(src_path):
-                shutil.copytree(src_path, dst_path, dirs_exist_ok=True)
+        # Copy intelligence files individually (NOT recursively) to avoid
+        # snapshotting intelligence/applied/ into itself
+        intel_src = os.path.join(ws, "intelligence")
+        intel_dst = os.path.join(snap_dir, "intelligence")
+        os.makedirs(intel_dst, exist_ok=True)
+        if os.path.isdir(intel_src):
+            for item in os.listdir(intel_src):
+                src_path = os.path.join(intel_src, item)
+                dst_path = os.path.join(intel_dst, item)
+                if item == "applied":
+                    continue  # Skip to prevent recursive nesting
+                if os.path.isfile(src_path):
+                    shutil.copy2(src_path, dst_path)
+                elif os.path.isdir(src_path):
+                    shutil.copytree(src_path, dst_path, dirs_exist_ok=True)
 
-    for f in SNAPSHOT_FILES:
-        src = os.path.join(ws, f)
-        if os.path.isfile(src):
-            shutil.copy2(src, os.path.join(snap_dir, f))
+        for f in SNAPSHOT_FILES:
+            src = os.path.join(ws, f)
+            if os.path.isfile(src):
+                shutil.copy2(src, os.path.join(snap_dir, f))
 
     return snap_dir
 
@@ -994,8 +1022,13 @@ def _apply_proposal_locked(ws, proposal, proposal_id, source_file, lock):
     print(f"\n--- Creating Snapshot: {ts} ---")
     # Record pre-apply file listing for orphan detection
     pre_apply_files = _list_workspace_files(ws)
-    snap_dir = create_snapshot(ws, ts)
-    print(f"  Snapshot: {snap_dir}")
+    # Minimal snapshot: only files the proposal will touch (O(touched) vs O(workspace))
+    files_touched = proposal.get("FilesTouched", [])
+    if not files_touched:
+        files_touched = list({op.get("file", "") for op in proposal.get("Ops", []) if op.get("file")})
+    snap_dir = create_snapshot(ws, ts, files_touched=files_touched or None)
+    snap_mode = "minimal" if files_touched else "full"
+    print(f"  Snapshot: {snap_dir} ({snap_mode}, {len(files_touched)} files)")
 
     # 5. Check preconditions (may run validate.sh + intel_scan.py which write reports)
     print("\n--- Precondition Checks ---")

@@ -187,11 +187,18 @@ class TestFormatAsBlocks:
                   "speaker": "", "date": "", "source_id": "",
                   "confidence": 0.8}]
         text = format_as_blocks(cards)
-        stmt = [l for l in text.splitlines() if l.startswith("Statement:")][0]
-        after_key = stmt.split("Statement: ", 1)[1]
-        # Exactly one opening paren at the start — no double prefix
-        assert after_key.count("(identity description who is)") == 1, \
-            f"Double-prepend detected: {stmt}"
+        # Select by content match, not index
+        stmt_lines = [l for l in text.splitlines()
+                      if l.startswith("Statement:") and "Already prefixed" in l]
+        assert len(stmt_lines) == 1
+        after_key = stmt_lines[0].split("Statement: ", 1)[1]
+        # Structural check: exactly one leading prefix, not label-specific
+        assert after_key.startswith("("), "Missing prefix"
+        prefix_end = after_key.index(") ") + 2
+        remainder = after_key[prefix_end:]
+        # After the first prefix closes, content must NOT start with another prefix
+        assert not remainder.startswith("("), \
+            f"Double-prepend detected: {stmt_lines[0]}"
 
     def test_double_format_stability(self):
         """Formatting output twice should produce identical statements."""
@@ -199,15 +206,17 @@ class TestFormatAsBlocks:
                   "speaker": "John", "date": "2023-06-01",
                   "source_id": "DIA-D2-5", "confidence": 0.9}]
         text1 = format_as_blocks(cards)
-        # Extract the statement content as if it were fed back as new content
-        stmt1 = [l for l in text1.splitlines() if l.startswith("Statement:")][0]
+        # Select by content match
+        stmt1 = [l for l in text1.splitlines()
+                 if l.startswith("Statement:") and "visited the park" in l][0]
         content_with_prefix = stmt1.split("Statement: ", 1)[1]
         # Feed it back through as content
         cards2 = [{"type": "EVENT", "content": content_with_prefix,
                    "speaker": "John", "date": "2023-06-01",
                    "source_id": "DIA-D2-5", "confidence": 0.9}]
         text2 = format_as_blocks(cards2)
-        stmt2 = [l for l in text2.splitlines() if l.startswith("Statement:")][0]
+        stmt2 = [l for l in text2.splitlines()
+                 if l.startswith("Statement:") and "visited the park" in l][0]
         assert stmt1 == stmt2, f"Not idempotent:\n  pass1: {stmt1}\n  pass2: {stmt2}"
 
 
