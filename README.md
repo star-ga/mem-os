@@ -157,11 +157,11 @@ Continuous integrity checking: contradictions, drift, dead decisions, orphan tas
 ### Safe Governance
 All changes flow through graduated modes: `detect_only` → `propose` → `enforce`. Apply engine with snapshot, receipt, DIFF, and automatic rollback on validation failure.
 
-### BM25 Hybrid Recall
-BM25 scoring with Porter stemming, domain-aware query expansion, field boosts, recency weighting, and optional graph-based cross-reference neighbor boosting. Zero dependencies. Fast and deterministic.
+### BM25F Hybrid Recall
+BM25F field-weighted scoring with Porter stemming, bigram phrase matching, overlapping chunk indexing, domain-aware query expansion, query type detection (temporal/multi-hop/adversarial/single-hop), and optional 2-hop graph-based cross-reference neighbor boosting. Zero dependencies. Fast and deterministic.
 
 ### Graph-Based Recall
-Cross-reference neighbor boosting — when a keyword match is found, blocks that reference or are referenced by the match get boosted. Surfaces related decisions, tasks, and entities that share no keywords but are structurally connected. Zero dependencies.
+2-hop cross-reference neighbor boosting — when a keyword match is found, blocks that reference or are referenced by the match get boosted (1-hop: 0.3x decay, 2-hop: 0.1x decay). Surfaces related decisions, tasks, and entities that share no keywords but are structurally connected. Auto-enabled for multi-hop queries. Zero dependencies.
 
 ### Vector Recall (optional)
 Pluggable embedding backend — local (Qdrant + Ollama) or cloud (Pinecone). Falls back to BM25 when unavailable.
@@ -420,43 +420,47 @@ your-workspace/
 
 Compared against every major memory solution for AI agents (as of 2026):
 
-| Capability | [Mem0](https://github.com/mem0ai/mem0) | [Supermemory](https://supermemory.ai) | [claude-mem](https://github.com/thedotmack/claude-mem) | [Letta](https://www.letta.com) | [Zep](https://www.getzep.com) | [LangMem](https://github.com/langchain-ai) | [Cognee](https://www.cognee.ai) | [Graphlit](https://www.graphlit.com) | **Mem OS** |
-|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| **Recall & Search** | | | | | | | | | |
-| Semantic recall (vector) | Cloud | Cloud | ChromaDB | Yes | Yes | Yes | Yes | Yes | **Optional (local/cloud)** |
-| Lexical recall (keyword) | Filter | No | No | No | No | No | No | No | **BM25 with stemming + expansion** |
-| Graph-based recall | Yes | No | No | No | Yes | No | Yes | Yes | **Yes (xref neighbor boost)** |
-| Hybrid search | Partial | No | No | No | Yes | No | Yes | Yes | **BM25 + graph + optional vector** |
-| **Memory Persistence** | | | | | | | | | |
-| Structured memory | JSON | JSON | SQLite | Memory blocks | Graph | KV store | Graph | Graph | **Markdown blocks** |
-| Entity tracking | Yes | Yes | No | Yes | Yes | Yes | Yes | Yes | **Yes (people/projects/tools)** |
-| Temporal awareness | No | No | No | No | Yes | No | No | No | **Yes (date-indexed)** |
-| Supersede chains | No | No | No | Yes | Yes | No | No | No | **Yes (never edit, supersede)** |
-| Append-only logs | No | No | No | No | No | No | No | No | **Yes (daily logs)** |
-| **Integrity & Safety** | | | | | | | | | |
-| Contradiction detection | No | No | No | No | No | No | No | No | **Yes (ConstraintSignatures)** |
-| Drift analysis | No | No | No | No | No | No | No | No | **Yes (dead decisions, orphans)** |
-| Structural validation | No | No | No | No | No | No | No | No | **74+ checks + 369 tests** |
-| Impact graph | No | No | No | No | No | No | No | No | **Yes (decision → task/entity)** |
-| Coverage scoring | No | No | No | No | No | No | No | No | **Yes (% decisions enforced)** |
-| Provenance gate | No | No | No | No | Partial | No | No | No | **Yes (no source = no claim)** |
-| Multi-agent namespaces | No | No | No | Yes | No | No | No | No | **Yes (ACL + shared ledger)** |
-| Conflict resolution | No | No | No | No | No | No | No | No | **Yes (graduated auto-resolve)** |
-| WAL / crash recovery | No | No | No | No | No | No | No | No | **Yes (journal-based)** |
-| Backup / restore | No | No | No | No | No | No | No | No | **Yes (tar.gz + JSONL export)** |
-| **Governance** | | | | | | | | | |
-| Auto-capture | Auto-write | Auto-write | Auto-write | Self-edit | Auto-extract | Auto-extract | Auto-extract | Auto-ingest | **Proposal-based (safe)** |
-| Proposal queue | No | No | No | No | No | No | No | No | **Yes (proposed/)** |
-| Apply with rollback | No | No | No | No | No | No | No | No | **Yes (snapshot + DIFF)** |
-| Mode governance | No | No | No | No | No | No | No | No | **3 modes** |
-| Audit trail | No | Partial | No | No | No | No | No | No | **Full (every apply logged)** |
-| **Operations** | | | | | | | | | |
-| Local-only operation | No | No | Yes | No | No | No | No | No | **Yes** |
-| Zero dependencies | No | No | No | No | No | No | No | No | **Yes (stdlib only)** |
-| No daemon required | No | No | No | No | No | Yes | No | No | **Yes (just files + scripts)** |
-| Git-friendly (plain text) | No | No | No | Partial | No | No | No | No | **Yes (all Markdown)** |
-| OpenClaw native | No | Plugin | Plugin | No | No | Plugin | No | No | **Yes (hooks + skills)** |
-| MCP server | No | No | No | No | No | No | No | No | **Yes (FastMCP, stdio + HTTP)** |
+<table style="font-size:0.8em">
+<thead>
+<tr><th>Capability</th><th><a href="https://github.com/mem0ai/mem0">Mem0</a></th><th><a href="https://supermemory.ai">Super&shy;memory</a></th><th><a href="https://github.com/thedotmack/claude-mem">claude-mem</a></th><th><a href="https://www.letta.com">Letta</a></th><th><a href="https://www.getzep.com">Zep</a></th><th><a href="https://github.com/langchain-ai">LangMem</a></th><th><a href="https://www.cognee.ai">Cognee</a></th><th><a href="https://www.graphlit.com">Graphlit</a></th><th><b>Mem&nbsp;OS</b></th></tr>
+</thead>
+<tbody>
+<tr><td colspan="10"><b>Recall & Search</b></td></tr>
+<tr><td>Semantic recall (vector)</td><td>Cloud</td><td>Cloud</td><td>ChromaDB</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td><b>Optional</b></td></tr>
+<tr><td>Lexical recall (keyword)</td><td>Filter</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td><b>BM25F + stemming</b></td></tr>
+<tr><td>Graph-based recall</td><td>Yes</td><td>—</td><td>—</td><td>—</td><td>Yes</td><td>—</td><td>Yes</td><td>Yes</td><td><b>2-hop xref boost</b></td></tr>
+<tr><td>Hybrid search</td><td>Partial</td><td>—</td><td>—</td><td>—</td><td>Yes</td><td>—</td><td>Yes</td><td>Yes</td><td><b>BM25F + graph + vector</b></td></tr>
+<tr><td colspan="10"><b>Memory Persistence</b></td></tr>
+<tr><td>Structured memory</td><td>JSON</td><td>JSON</td><td>SQLite</td><td>Blocks</td><td>Graph</td><td>KV</td><td>Graph</td><td>Graph</td><td><b>Markdown blocks</b></td></tr>
+<tr><td>Entity tracking</td><td>Yes</td><td>Yes</td><td>—</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td><b>Yes</b></td></tr>
+<tr><td>Temporal awareness</td><td>—</td><td>—</td><td>—</td><td>—</td><td>Yes</td><td>—</td><td>—</td><td>—</td><td><b>Yes (date-indexed)</b></td></tr>
+<tr><td>Supersede chains</td><td>—</td><td>—</td><td>—</td><td>Yes</td><td>Yes</td><td>—</td><td>—</td><td>—</td><td><b>Yes</b></td></tr>
+<tr><td>Append-only logs</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td><b>Yes</b></td></tr>
+<tr><td colspan="10"><b>Integrity & Safety</b></td></tr>
+<tr><td>Contradiction detection</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td><b>Yes (signatures)</b></td></tr>
+<tr><td>Drift analysis</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td><b>Yes</b></td></tr>
+<tr><td>Structural validation</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td><b>74+ checks</b></td></tr>
+<tr><td>Impact graph</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td><b>Yes</b></td></tr>
+<tr><td>Coverage scoring</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td><b>Yes</b></td></tr>
+<tr><td>Multi-agent namespaces</td><td>—</td><td>—</td><td>—</td><td>Yes</td><td>—</td><td>—</td><td>—</td><td>—</td><td><b>Yes (ACL + ledger)</b></td></tr>
+<tr><td>Conflict resolution</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td><b>Yes (auto-resolve)</b></td></tr>
+<tr><td>WAL / crash recovery</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td><b>Yes</b></td></tr>
+<tr><td>Backup / restore</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td><b>Yes</b></td></tr>
+<tr><td colspan="10"><b>Governance</b></td></tr>
+<tr><td>Auto-capture</td><td>Auto</td><td>Auto</td><td>Auto</td><td>Self-edit</td><td>Extract</td><td>Extract</td><td>Extract</td><td>Ingest</td><td><b>Proposal-based</b></td></tr>
+<tr><td>Proposal queue</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td><b>Yes</b></td></tr>
+<tr><td>Apply with rollback</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td><b>Yes</b></td></tr>
+<tr><td>Mode governance</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td><b>3 modes</b></td></tr>
+<tr><td>Audit trail</td><td>—</td><td>Partial</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td><b>Full</b></td></tr>
+<tr><td colspan="10"><b>Operations</b></td></tr>
+<tr><td>Local-only</td><td>—</td><td>—</td><td>Yes</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td><b>Yes</b></td></tr>
+<tr><td>Zero dependencies</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td><b>Yes (stdlib)</b></td></tr>
+<tr><td>No daemon required</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>Yes</td><td>—</td><td>—</td><td><b>Yes</b></td></tr>
+<tr><td>Git-friendly</td><td>—</td><td>—</td><td>—</td><td>Partial</td><td>—</td><td>—</td><td>—</td><td>—</td><td><b>Yes (Markdown)</b></td></tr>
+<tr><td>OpenClaw native</td><td>—</td><td>Plugin</td><td>Plugin</td><td>—</td><td>—</td><td>Plugin</td><td>—</td><td>—</td><td><b>Yes (hooks + skills)</b></td></tr>
+<tr><td>MCP server</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td><b>Yes (FastMCP)</b></td></tr>
+</tbody>
+</table>
 
 ### What Each Tool Does Best
 
@@ -470,7 +474,7 @@ Compared against every major memory solution for AI agents (as of 2026):
 | **LangMem** | Native LangChain/LangGraph integration | Tied to LangChain ecosystem |
 | **Cognee** | Advanced chunking, web content bridging | Research-oriented, complex setup |
 | **Graphlit** | Multimodal ingestion, semantic search, managed platform | Cloud-only, managed service |
-| **Mem OS** | Integrity + governance + zero deps + local-first, 58.5% LoCoMo with pure BM25 | Lexical recall by default (vector + compression optional) |
+| **Mem OS** | Integrity + governance + zero deps + local-first, 58.5% LoCoMo with pure BM25F | Lexical recall by default (vector + compression optional) |
 
 ### The Gap Mem OS Fills
 
@@ -507,19 +511,23 @@ python3 maintenance/recall.py --query "auth" --json --limit 5 --workspace .
 python3 maintenance/recall.py --query "deadline" --active-only --workspace .
 ```
 
-BM25 scoring (k1=1.2, b=0.75) with Porter stemming, domain-aware query expansion, field boosts for recency, active status, and priority. Searches across all structured files. Zero dependencies.
+BM25F scoring (k1=1.2, b=0.75) with per-field weighting (Statement: 3x, Title: 2.5x, Name: 2x, Summary: 1.5x, etc.), bigram phrase matching (25% boost per phrase hit), overlapping sentence chunking (3-sentence windows with 1-sentence overlap), and query-type-aware parameter tuning. Searches across all structured files. Zero dependencies.
 
-**Query expansion:** Searching "auth" automatically expands to include "authentication", "login", "oauth", "jwt", "session". Domain-aware synonyms cover auth, database, API, deployment, testing, security, performance, and infrastructure terms.
+**BM25F field weighting:** Terms in `Statement` fields score 3x higher than terms in `Context` (0.5x). This naturally prioritizes core content over auxiliary metadata.
+
+**Bigram phrase matching:** Query "database migration" matches blocks containing both words adjacently, boosting exact phrase matches over scattered keyword hits.
+
+**Query type detection:** Automatically classifies queries as temporal, multi-hop, adversarial, or single-hop using pattern-based heuristics. Temporal queries get 2x date boost and higher recency weight. Multi-hop queries force graph traversal. Query expansion covers auth, database, API, deployment, testing, security, performance, and infrastructure terms.
 
 **Stemming:** "queries" matches "query", "deployed" matches "deployment", "authenticating" matches "authentication". Simplified Porter stemmer with zero dependencies.
 
-### Graph-Based (cross-reference neighbor boost)
+### Graph-Based (2-hop cross-reference boost)
 
 ```bash
 python3 maintenance/recall.py --query "database" --graph --workspace .
 ```
 
-Adds graph traversal to BM25: when a block matches your query, its 1-hop cross-reference neighbors also appear in results (tagged `[graph]`). This surfaces related blocks that share no keywords but are structurally connected via `AlignsWith`, `Dependencies`, `Supersedes`, `Sources`, ConstraintSignature scopes, and any other block ID mention.
+2-hop graph traversal on BM25 results: when a block matches your query, its 1-hop neighbors get 0.3x score boost and 2-hop neighbors get 0.1x boost (tagged `[graph]`). Surfaces structurally connected blocks via `AlignsWith`, `Dependencies`, `Supersedes`, `Sources`, ConstraintSignature scopes, and any block ID mention. Auto-enabled for multi-hop queries.
 
 ### Optional: Vector (pluggable)
 

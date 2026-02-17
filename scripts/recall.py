@@ -244,6 +244,217 @@ def extract_text(block: dict) -> str:
     return " ".join(parts)
 
 
+# ---------------------------------------------------------------------------
+# BM25F — Field-weighted term extraction
+# ---------------------------------------------------------------------------
+
+# Weight multipliers per field for BM25F scoring.
+# Higher weight = terms in this field contribute more to the score.
+FIELD_WEIGHTS = {
+    "Statement": 3.0, "Title": 2.5, "Name": 2.0,
+    "Summary": 1.5, "Description": 1.2, "Purpose": 1.2,
+    "RootCause": 1.2, "Fix": 1.2, "Prevention": 1.0,
+    "Tags": 0.8, "Keywords": 0.8,
+    "Context": 0.5, "Rationale": 0.5, "ProposedFix": 0.5,
+    "History": 0.3,
+}
+
+
+def extract_field_tokens(block: dict) -> dict[str, list[str]]:
+    """Extract and tokenize per-field for BM25F scoring.
+
+    Returns {field_name: [stemmed_tokens]} for each non-empty field.
+    Also includes _id tokens under a synthetic '_id' key.
+    """
+    field_tokens = {}
+
+    bid = block.get("_id", "")
+    if bid:
+        field_tokens["_id"] = tokenize(bid)
+
+    for field in SEARCH_FIELDS:
+        val = block.get(field, "")
+        if isinstance(val, str) and val:
+            tokens = tokenize(val)
+            if tokens:
+                field_tokens[field] = tokens
+        elif isinstance(val, list):
+            combined = " ".join(str(v) for v in val)
+            tokens = tokenize(combined)
+            if tokens:
+                field_tokens[field] = tokens
+
+    # ConstraintSignature fields
+    sig_parts = []
+    for sig in block.get("ConstraintSignatures", []):
+        for sf in SIG_FIELDS:
+            val = sig.get(sf, "")
+            if isinstance(val, str):
+                sig_parts.append(val)
+    if sig_parts:
+        tokens = tokenize(" ".join(sig_parts))
+        if tokens:
+            field_tokens["_sig"] = tokens
+
+    return field_tokens
+
+
+# ---------------------------------------------------------------------------
+# Bigram phrase matching
+# ---------------------------------------------------------------------------
+
+def get_bigrams(tokens: list[str]) -> set[tuple[str, str]]:
+    """Generate set of adjacent token pairs (bigrams)."""
+    return set(zip(tokens, tokens[1:]))
+
+
+# ---------------------------------------------------------------------------
+# Overlapping chunk indexing
+# ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# Query Type Detection — category-specific retrieval tuning
+# ---------------------------------------------------------------------------
+
+# Temporal signal words/patterns
+_TEMPORAL_PATTERNS = re.compile(
+    r"\b(when|before|after|during|while|since|until|first|last|latest|earliest"
+    r"|recent|previous|next|ago|year|month|week|day|date|time|period"
+    r"|january|february|march|april|may|june|july|august|september"
+    r"|october|november|december|spring|summer|fall|winter|autumn"
+    r"|morning|evening|night|weekend|holiday|birthday|anniversary"
+    r"|how long|how often|what time|what date|what year|what month"
+    r"|started|ended|began|finished|happened|occurred|changed"
+    r"|earlier|later|prior|subsequent|meanwhile|eventually)\b",
+    re.IGNORECASE,
+)
+
+# Adversarial negation patterns
+_ADVERSARIAL_PATTERNS = re.compile(
+    r"\b(never|not|no one|nobody|nothing|nowhere|neither|nor"
+    r"|didn.t|doesn.t|don.t|wasn.t|weren.t|isn.t|aren.t|hasn.t"
+    r"|haven.t|hadn.t|won.t|wouldn.t|can.t|couldn.t|shouldn.t"
+    r"|false|incorrect|wrong|untrue|lie|fake|fabricat"
+    r"|no interest|no desire|no intention|no plan"
+    r"|contrary|opposite|instead|rather than|unlike|different from)\b",
+    re.IGNORECASE,
+)
+
+# Multi-hop indicators (questions requiring info from multiple sources)
+_MULTIHOP_PATTERNS = re.compile(
+    r"\b(both|and also|as well as|in addition|together|combined"
+    r"|relationship|connection|between|compare|comparison|versus|vs|both"
+    r"|how many|how much|total|count|sum|all|every|each"
+    r"|who else|what else|where else|which other"
+    r"|same|similar|different|shared|common|overlap"
+    r"|because|caused|resulted|led to|due to|reason|why did)\b",
+    re.IGNORECASE,
+)
+
+
+def detect_query_type(query: str) -> str:
+    """Classify query into temporal/adversarial/multi-hop/single-hop.
+
+    Returns one of: 'temporal', 'adversarial', 'multi-hop', 'single-hop'.
+    Uses pattern-based heuristics with scoring to handle ambiguous queries.
+    """
+    query_lower = query.lower()
+
+    temporal_hits = len(_TEMPORAL_PATTERNS.findall(query_lower))
+    adversarial_hits = len(_ADVERSARIAL_PATTERNS.findall(query_lower))
+    multihop_hits = len(_MULTIHOP_PATTERNS.findall(query_lower))
+
+    # Question mark count can indicate complexity
+    qmarks = query.count("?")
+
+    # Score each category
+    scores = {
+        "temporal": temporal_hits * 2,
+        "adversarial": adversarial_hits * 2.5,
+        "multi-hop": multihop_hits * 1.5 + (1 if qmarks > 1 else 0),
+        "single-hop": 1,  # default baseline
+    }
+
+    # Strong negation at start is a very strong adversarial signal
+    if re.match(r"^(did|was|were|is|has|have|does|do)\b.+\b(not|never|n.t)\b", query_lower):
+        scores["adversarial"] += 3
+    # "Did X ever" is also adversarial (expects yes/no about something that may not have happened)
+    if re.search(r"\bever\b", query_lower):
+        scores["adversarial"] += 2
+
+    # Long queries with conjunctions are more likely multi-hop
+    word_count = len(query.split())
+    if word_count > 15 and multihop_hits > 0:
+        scores["multi-hop"] += 2
+
+    # Pick the highest-scoring category
+    best = max(scores, key=scores.get)
+
+    # Only override single-hop if signal is strong enough
+    if best == "single-hop" or scores[best] < 1.5:
+        return "single-hop"
+
+    return best
+
+
+# Category-specific retrieval parameters
+_QUERY_TYPE_PARAMS = {
+    "temporal": {
+        "recency_weight": 0.6,     # Higher recency matters more
+        "date_boost": 2.0,         # Boost blocks with dates
+        "expand_query": True,      # Keep expansions
+        "extra_limit_factor": 1.5, # Retrieve more candidates
+    },
+    "adversarial": {
+        "recency_weight": 0.3,     # Standard — adversarial needs same broad recall
+        "date_boost": 1.0,         # No date boost
+        "expand_query": True,      # Keep expansion — adversarial answers ARE in context
+        "extra_limit_factor": 1.0, # Standard — handled at answerer level, not retrieval
+    },
+    "multi-hop": {
+        "recency_weight": 0.3,     # Standard
+        "date_boost": 1.0,
+        "expand_query": True,
+        "extra_limit_factor": 2.0, # Need more blocks to find all hops
+        "graph_boost_override": True,  # Force graph traversal
+    },
+    "single-hop": {
+        "recency_weight": 0.3,     # Standard
+        "date_boost": 1.0,
+        "expand_query": True,
+        "extra_limit_factor": 1.0,
+    },
+}
+
+
+def chunk_text(text: str, chunk_size: int = 3, overlap: int = 1) -> list[str]:
+    """Split text into overlapping sentence chunks.
+
+    Args:
+        text: Full text to chunk.
+        chunk_size: Sentences per chunk.
+        overlap: Overlapping sentences between chunks.
+
+    Returns list of chunk strings. Returns [text] if <=chunk_size sentences.
+    """
+    # Simple sentence splitting on .!? followed by space or end
+    sentences = re.split(r'(?<=[.!?])\s+', text.strip())
+    sentences = [s for s in sentences if s.strip()]
+
+    if len(sentences) <= chunk_size:
+        return [text]
+
+    chunks = []
+    step = max(1, chunk_size - overlap)
+    for start in range(0, len(sentences), step):
+        chunk = " ".join(sentences[start:start + chunk_size])
+        if chunk.strip():
+            chunks.append(chunk)
+        if start + chunk_size >= len(sentences):
+            break
+    return chunks if chunks else [text]
+
+
 def get_excerpt(block: dict, max_len: int = 120) -> str:
     """Get a short excerpt from a block."""
     for field in ("Statement", "Title", "Summary", "Description", "Name", "Context"):
@@ -363,8 +574,20 @@ def recall(workspace: str, query: str, limit: int = 10, active_only: bool = Fals
     if not query_tokens:
         return []
 
-    # Query expansion: add domain synonyms
-    query_tokens = expand_query(query_tokens)
+    # Detect query type for category-specific tuning
+    query_type = detect_query_type(query)
+    qparams = _QUERY_TYPE_PARAMS.get(query_type, _QUERY_TYPE_PARAMS["single-hop"])
+
+    # Query expansion: add domain synonyms (skip for adversarial — precision over recall)
+    if qparams.get("expand_query", True):
+        query_tokens = expand_query(query_tokens)
+
+    # Force graph boost for multi-hop queries
+    if qparams.get("graph_boost_override", False):
+        graph_boost = True
+
+    # Adjust effective limit for retrieval (retrieve more candidates, trim later)
+    effective_limit = int(limit * qparams.get("extra_limit_factor", 1.0))
 
     # Namespace ACL: resolve accessible paths if agent_id is provided
     ns_manager = None
@@ -420,60 +643,113 @@ def recall(workspace: str, query: str, limit: int = 10, active_only: bool = Fals
     if not all_blocks:
         return []
 
-    # Tokenize all documents
-    doc_tokens = []
+    # --- BM25F: per-field tokenization + flat token list for IDF ---
+    doc_field_tokens = []   # [{field: [tokens]}] per block
+    doc_flat_tokens = []    # [[all_tokens]] per block (for IDF + bigrams)
     for block in all_blocks:
-        text = extract_text(block)
-        tokens = tokenize(text)
-        doc_tokens.append(tokens)
+        ft = extract_field_tokens(block)
+        doc_field_tokens.append(ft)
+        flat = []
+        for tokens in ft.values():
+            flat.extend(tokens)
+        doc_flat_tokens.append(flat)
 
-    # Document frequency + average document length (for BM25)
+    # Document frequency + average weighted doc length
     df = Counter()
-    total_len = 0
-    for tokens in doc_tokens:
-        unique = set(tokens)
-        for t in unique:
+    total_wdl = 0.0
+    for i, ft in enumerate(doc_field_tokens):
+        seen = set()
+        wdl = 0.0
+        for field, tokens in ft.items():
+            w = FIELD_WEIGHTS.get(field, 1.0)
+            wdl += len(tokens) * w
+            for t in tokens:
+                seen.add(t)
+        for t in seen:
             df[t] += 1
-        total_len += len(tokens)
+        total_wdl += wdl
 
     N = len(all_blocks)
-    avgdl = total_len / N if N > 0 else 1
+    avg_wdl = total_wdl / N if N > 0 else 1.0
+
+    # Pre-compute query bigrams for phrase matching
+    query_bigrams = get_bigrams(query_tokens)
 
     results = []
 
     for i, block in enumerate(all_blocks):
-        tokens = doc_tokens[i]
-        if not tokens:
+        ft = doc_field_tokens[i]
+        flat = doc_flat_tokens[i]
+        if not flat:
             continue
 
-        tf = Counter(tokens)
-        dl = len(tokens)
-        score = 0.0
+        # --- BM25F: field-weighted term frequency ---
+        # Compute weighted TF across all fields
+        weighted_tf = Counter()
+        wdl = 0.0
+        for field, tokens in ft.items():
+            w = FIELD_WEIGHTS.get(field, 1.0)
+            wdl += len(tokens) * w
+            for t in tokens:
+                weighted_tf[t] += w
 
+        score = 0.0
         for qt in query_tokens:
-            if qt in tf:
-                # BM25 score
-                freq = tf[qt]
+            if qt in weighted_tf:
+                wtf = weighted_tf[qt]
                 idf = math.log((N - df.get(qt, 0) + 0.5) / (df.get(qt, 0) + 0.5) + 1)
-                numerator = freq * (BM25_K1 + 1)
-                denominator = freq + BM25_K1 * (1 - BM25_B + BM25_B * dl / avgdl)
+                numerator = wtf * (BM25_K1 + 1)
+                denominator = wtf + BM25_K1 * (1 - BM25_B + BM25_B * wdl / avg_wdl)
                 score += idf * numerator / denominator
 
         if score <= 0:
             continue
 
-        # Boost factors
-        recency = date_score(block)
-        score *= (0.7 + 0.3 * recency)
+        # --- Bigram phrase matching boost ---
+        if query_bigrams:
+            doc_bigrams = get_bigrams(flat)
+            phrase_matches = len(query_bigrams & doc_bigrams)
+            if phrase_matches > 0:
+                score *= (1.0 + 0.25 * phrase_matches)
 
-        # Boost active status
+        # --- Chunking boost: score best chunk separately, blend ---
+        # For long blocks, check if a chunk scores much higher
+        statement = block.get("Statement", "") or block.get("Title", "") or ""
+        if len(statement) > 200:
+            chunks = chunk_text(statement)
+            if len(chunks) > 1:
+                best_chunk_score = 0.0
+                for chunk in chunks:
+                    ctokens = tokenize(chunk)
+                    ctf = Counter(ctokens)
+                    cdl = len(ctokens)
+                    cs = 0.0
+                    for qt in query_tokens:
+                        if qt in ctf:
+                            freq = ctf[qt]
+                            idf = math.log((N - df.get(qt, 0) + 0.5) / (df.get(qt, 0) + 0.5) + 1)
+                            cs += idf * freq * (BM25_K1 + 1) / (freq + BM25_K1 * (1 - BM25_B + BM25_B * cdl / max(avg_wdl, 1)))
+                    best_chunk_score = max(best_chunk_score, cs)
+                # Blend: take the better of full-block or best-chunk score
+                if best_chunk_score > score:
+                    score = 0.6 * best_chunk_score + 0.4 * score
+
+        # --- Boost factors (query-type-aware) ---
+        recency = date_score(block)
+        rw = qparams.get("recency_weight", 0.3)
+        score *= (1.0 - rw + rw * recency)
+
+        # Temporal queries: boost blocks that contain dates
+        date_boost = qparams.get("date_boost", 1.0)
+        if date_boost > 1.0 and block.get("Date", ""):
+            score *= date_boost
+
         status = block.get("Status", "")
         if status == "active":
             score *= 1.2
         elif status in ("todo", "doing"):
             score *= 1.1
 
-        # Priority boost
         priority = block.get("Priority", "")
         if priority in ("P0", "P1"):
             score *= 1.1
@@ -488,28 +764,34 @@ def recall(workspace: str, query: str, limit: int = 10, active_only: bool = Fals
             "status": status,
         })
 
-    # Graph-based neighbor boosting: propagate score to 1-hop neighbors
+    # Graph-based neighbor boosting: 2-hop traversal for multi-hop recall
     if graph_boost and results:
         xref_graph = build_xref_graph(all_blocks)
         score_by_id = {r["_id"]: r["score"] for r in results}
-        # Blocks not yet in results can be added via graph traversal
         block_by_id = {b.get("_id"): b for b in all_blocks if b.get("_id")}
 
         neighbor_scores = {}
-        for r in results:
-            for neighbor_id in xref_graph.get(r["_id"], set()):
-                if neighbor_id not in score_by_id:
-                    # New block discovered via graph — add with boosted score
-                    boost = r["score"] * GRAPH_BOOST_FACTOR
-                    neighbor_scores[neighbor_id] = (
-                        neighbor_scores.get(neighbor_id, 0) + boost
-                    )
-                else:
-                    # Existing result — additional graph boost
-                    boost = r["score"] * GRAPH_BOOST_FACTOR * 0.5
-                    neighbor_scores[neighbor_id] = (
-                        neighbor_scores.get(neighbor_id, 0) + boost
-                    )
+
+        # 2-hop traversal: decay 0.3 for 1-hop, 0.1 for 2-hop
+        for hop, decay in enumerate([GRAPH_BOOST_FACTOR, GRAPH_BOOST_FACTOR * 0.33]):
+            # On first hop, seed from BM25 results; on second, seed from 1-hop discoveries
+            seeds = results if hop == 0 else [
+                {"_id": nid, "score": ns}
+                for nid, ns in neighbor_scores.items()
+                if nid not in score_by_id
+            ]
+            for r in seeds:
+                rid = r["_id"]
+                for neighbor_id in xref_graph.get(rid, set()):
+                    boost = r["score"] * decay
+                    if neighbor_id not in score_by_id:
+                        neighbor_scores[neighbor_id] = (
+                            neighbor_scores.get(neighbor_id, 0) + boost
+                        )
+                    else:
+                        neighbor_scores[neighbor_id] = (
+                            neighbor_scores.get(neighbor_id, 0) + boost * 0.5
+                        )
 
         # Apply boosts to existing results
         for r in results:
@@ -535,7 +817,8 @@ def recall(workspace: str, query: str, limit: int = 10, active_only: bool = Fals
     # Sort by score descending
     results.sort(key=lambda r: r["score"], reverse=True)
     top = results[:limit]
-    _log.info("query_complete", query=query, blocks_searched=N, results=len(top),
+    _log.info("query_complete", query=query, query_type=query_type,
+              blocks_searched=N, results=len(top),
               top_score=top[0]["score"] if top else 0)
     metrics.inc("recall_queries")
     metrics.inc("recall_results", len(top))
