@@ -2,6 +2,27 @@
 
 All notable changes to Mem-OS are documented in this file.
 
+## 1.1.3 (2026-02-17)
+
+**Audit round 2: evidence_packer tests, security, functional fixes**
+
+### Added
+- 41 new tests for `evidence_packer.py` (was zero coverage) — covers all public functions, routing, packing strategies, edge cases
+- Test for `"never"` pattern triggering negation penalty
+
+### Security
+- Simplified `_ADVERSARIAL_SIGNAL_RE` to eliminate ReDoS risk (removed bounded-repeat branch)
+- Moved `_load_env()` from module import scope to `main()` — prevents global env mutation on import
+- Added `max_retries >= 1` guard in `_llm_chat()`
+
+### Fixed
+- `"never"` now triggers `has_ever_pattern` penalty (was only `"ever"`) — functional gap in adversarial detection
+- Removed duplicate `wasn't` entry in `_DENIAL_RE`
+- Removed redundant local `from recall import detect_query_type` (uses module-level global)
+
+### Changed
+- Test count: 520 → 562
+
 ## 1.1.2 (2026-02-17)
 
 **Code quality: remaining pre-existing audit findings**
