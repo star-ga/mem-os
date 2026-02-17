@@ -10,12 +10,11 @@ dist/
 temp_workspace/
 reproduce_*.py
 
-# Benchmark caches and results (regenerated via benchmark scripts)
+# Benchmark caches and scratch (regenerated via benchmark scripts)
 benchmarks/.cache/
 benchmarks/locomo_results.json
-benchmarks/locomo_judge_results*.json
 benchmarks/*.partial
-benchmarks/*.jsonl
+benchmarks/results/
 
 # Workspace artifacts (not part of repo)
 /maintenance/

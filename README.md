@@ -75,7 +75,41 @@ Mem OS also **detects when your memory is wrong** — contradictions between dec
 
 ### Benchmark Results
 
-Mem-OS recall engine evaluated on two standard long-term memory benchmarks. Zero dependencies, pure BM25 + Porter stemming + domain-aware query expansion.
+Mem-OS recall engine evaluated on two standard long-term memory benchmarks. Zero dependencies, pure deterministic retrieval — no embeddings, no vector DB, no cloud calls.
+
+**LoCoMo LLM-as-Judge (retrieve → answer → judge pipeline):**
+
+Same pipeline as Mem0 and Letta evaluations: retrieve context, generate answer with LLM, score against gold reference with judge LLM. Directly comparable methodology.
+
+| Metric | v3 (baseline) | **v10** | Delta |
+|---|--:|--:|---|
+| **Acc ≥50** | 58.2% | **67.3%** | **+9.1pp** |
+| Mean Score | 54.3 | **61.4** | +7.1 |
+| Acc ≥75 | 36.5% | **48.8%** | +12.3pp |
+
+Category breakdown (gpt-4o-mini answerer + judge, all 10 conversations, N=1986):
+
+| Category | N | Acc (≥50) | Mean |
+|---|--:|--:|--:|
+| **Overall** | **1986** | **67.3%** | **61.4** |
+| Open-domain | 841 | 86.6% | 78.3 |
+| Temporal | 96 | 78.1% | 65.7 |
+| Single-hop | 282 | 68.8% | 59.1 |
+| Multi-hop | 321 | 55.5% | 48.4 |
+| Adversarial | 446 | 36.3% | 39.5 |
+
+> **Tag:** `v10_full10_validated` | **Judge:** `gpt-4o-mini` (answerer + judge) | **N:** 1986 questions, 10 conversations | See [`benchmarks/REPORT_v10.md`](benchmarks/REPORT_v10.md) for full methodology and reproduction steps.
+
+**Competitive landscape:**
+
+| System | Score | Approach |
+|---|--:|---|
+| Memobase | 75.8% | Specialized extraction |
+| **Letta** | 74.0% | Files + agent tool use |
+| **Mem0** | 68.5% | Graph + LLM extraction |
+| **Mem-OS** | **67.3%** | Deterministic BM25 + rule-based packing |
+
+> Mem-OS reaches **98%** of Mem0's score with pure deterministic retrieval — no embeddings, no vector DB, no cloud calls, no LLM in the retrieval loop. The retrieval pipeline treats recall as a reasoning problem: wide candidate retrieval → deterministic rerank (speaker/time/entity/bigram/recency signals) → context packing (adjacency, diversity, pronoun rescue). Mem-OS's unique value is **governance** (contradiction detection, drift, audit trails) and **agent-agnostic shared memory** via MCP — areas these benchmarks don't measure.
 
 **LongMemEval (ICLR 2025, 470 questions):**
 
@@ -86,46 +120,6 @@ Mem-OS recall engine evaluated on two standard long-term memory benchmarks. Zero
 | Temporal | 127 | 76.4 | 91.3 | 92.9 | .826 |
 | Knowledge update | 72 | 80.6 | 88.9 | 91.7 | .844 |
 | Single-session | 56 | 82.1 | 89.3 | 89.3 | .847 |
-
-**LoCoMo (Snap Research, 1986 questions):**
-
-| Category | N | R@1 | R@5 | R@10 | MRR |
-|---|--:|--:|--:|--:|--:|
-| **Overall** | **1986** | **35.7** | **58.5** | **66.9** | **.453** |
-| Multi-hop | 321 | 47.4 | 66.4 | 71.0 | .549 |
-| Open-domain | 841 | 38.4 | 62.1 | 70.0 | .484 |
-
-**LoCoMo LLM-as-Judge (retrieve → answer → judge pipeline):**
-
-Same pipeline as Mem0 and Letta evaluations: retrieve context via BM25F, generate answer with LLM, score against gold reference with judge LLM. Directly comparable methodology.
-
-| Pipeline | Judge | N | Acc (≥50) | Mean |
-|---|---|--:|--:|--:|
-| **BM25F** | gpt-4o-mini | 1986 | **58.2%** | 54.3 |
-
-Category breakdown (gpt-4o-mini, BM25F, all 10 conversations):
-
-| Category | N | Acc (≥50) | Mean |
-|---|--:|--:|--:|
-| **Overall** | **1986** | **58.2%** | **54.3** |
-| Open-domain | 841 | 75.7% | 68.3 |
-| Temporal | 96 | 70.8% | 61.5 |
-| Single-hop | 282 | 56.0% | 50.2 |
-| Multi-hop | 321 | 48.6% | 44.4 |
-| Adversarial | 446 | 30.7% | 36.3 |
-
-> **Judge:** `gpt-4o-mini` (answerer + judge). Same model as Mem0/Letta evals. 1986 questions, 10 conversations, 81 min.
-
-**Competitive landscape:**
-
-| System | Score | Approach |
-|---|--:|---|
-| Memobase | 75.8% | Specialized extraction |
-| **Letta** | 74.0% | Files + agent tool use |
-| **Mem0** | 68.5% | Graph + LLM extraction |
-| **Mem-OS** | **58.2%** | BM25F + Markdown files |
-
-> Mem-OS reaches **85%** of Mem0's score with pure BM25F — no embeddings, no vector DB, no cloud calls. The gap is lexical vs. graph/semantic retrieval; optional vector backends can close it. Mem-OS's unique value is **governance** (contradiction detection, drift, audit trails) and **agent-agnostic shared memory** via MCP — areas these benchmarks don't measure.
 
 **Pipeline modes:**
 
@@ -144,8 +138,8 @@ python3 benchmarks/longmemeval_harness.py
 python3 benchmarks/locomo_judge.py --dry-run
 python3 benchmarks/locomo_judge.py --answerer-model gpt-4o-mini --output results.json
 
-# With observation compression (higher accuracy, 3 API calls per question)
-python3 benchmarks/locomo_judge.py --answerer-model gpt-4o-mini --compress --output results.json
+# Selective conversations (e.g., quick suite)
+python3 benchmarks/locomo_harness.py --conv-ids 4,7,8
 ```
 
 ### Persistent Memory
@@ -190,8 +184,8 @@ Crash-safe writes via journal-based WAL. Full workspace backup (tar.gz), git-fri
 ### Transcript JSONL Capture
 Scans Claude Code / OpenClaw transcript files for user corrections, convention discoveries, bug fix insights, and architectural decisions. 16 transcript-specific patterns with role filtering and confidence classification.
 
-### 74+ Structural Checks + 391 Unit Tests
-`validate.sh` checks schemas, cross-references, ID formats, status values, supersede chains, ConstraintSignatures, and more. Backed by 391 pytest unit tests covering parser, recall (BM25 + stemming + expansion), capture (structured extraction + confidence), compaction, file locking, observability, namespaces, conflict resolution, WAL/backup, transcript capture, apply, intel_scan, schema migration, MCP server, and edge cases.
+### 74+ Structural Checks + 478 Unit Tests
+`validate.sh` checks schemas, cross-references, ID formats, status values, supersede chains, ConstraintSignatures, and more. Backed by 478 pytest unit tests covering parser, recall (BM25 + stemming + expansion + context packing), capture (structured extraction + confidence), compaction, file locking, observability, namespaces, conflict resolution, WAL/backup, transcript capture, apply, intel_scan, schema migration, MCP server, and edge cases.
 
 ### Audit Trail
 Every applied proposal logged with timestamp, receipt, and DIFF. Full traceability from signal → proposal → decision.
@@ -322,7 +316,7 @@ $ bash maintenance/validate.sh .
 TOTAL: 74 checks | 74 passed | 0 issues | 1 warnings
 ```
 
-> Note: validate.sh check count scales with data — fresh workspaces have 74 checks, populated workspaces have more. The 1 warning is expected (no weekly summaries yet). Additionally, 391 pytest unit tests cover all core modules.
+> Note: validate.sh check count scales with data — fresh workspaces have 74 checks, populated workspaces have more. The 1 warning is expected (no weekly summaries yet). Additionally, 478 pytest unit tests cover all core modules.
 
 ---
 
@@ -464,12 +458,12 @@ Compared against every major memory solution for AI agents (as of 2026):
 | **Mem0** | Fast managed service, graph memory, multi-user scoping | Cloud-dependent, no integrity checking |
 | **Supermemory** | Fastest retrieval (ms), auto-ingestion from Drive/Notion | Cloud-dependent, auto-writes without review |
 | **claude-mem** | Purpose-built for Claude Code, ChromaDB vectors, lifecycle hooks | Requires ChromaDB + Express worker, no integrity |
-| **Letta** | Self-editing memory blocks, sleep-time compute, 74% LoCoMo (plain-file baseline) | Full agent runtime (heavy), not just memory |
+| **Letta** | Self-editing memory blocks, sleep-time compute, 74% LoCoMo | Full agent runtime (heavy), not just memory |
 | **Zep** | Temporal knowledge graph, bi-temporal model, sub-second at scale | Cloud service, complex architecture |
 | **LangMem** | Native LangChain/LangGraph integration | Tied to LangChain ecosystem |
 | **Cognee** | Advanced chunking, web content bridging | Research-oriented, complex setup |
 | **Graphlit** | Multimodal ingestion, semantic search, managed platform | Cloud-only, managed service |
-| **Mem OS** | Integrity + governance + zero deps + local-first + agent-agnostic shared memory, 58.2% LoCoMo with pure BM25F | Lexical recall by default (vector optional) |
+| **Mem OS** | Integrity + governance + zero deps + local-first + agent-agnostic shared memory, **67.3% LoCoMo** with pure deterministic retrieval | Lexical recall by default (vector optional) |
 
 ### The Gap Mem OS Fills
 
@@ -492,7 +486,7 @@ Letta's August 2025 analysis showed that a plain-file baseline (full conversatio
 - **Overhead hurts.** Specialized pipelines introduce failure modes (bad embeddings, chunking errors, stale indexes) that simple file access avoids.
 - **For text-heavy agentic use cases, "how well the agent manages context" > "how smart the retrieval index is."**
 
-Mem-OS's Markdown-file + BM25F approach validates these findings: **58.2% on LoCoMo** with zero dependencies, no embeddings, and no vector database. Unlike plain-file baselines, Mem-OS adds integrity checking, governance, and agent-agnostic shared memory via MCP that no other system provides.
+Mem-OS's deterministic retrieval pipeline validates these findings: **67.3% on LoCoMo** (v10) with zero dependencies, no embeddings, and no vector database — within 1.2pp of Mem0's graph-based approach. The key insight: treating retrieval as a reasoning pipeline (wide candidate pool → deterministic rerank → context packing) closes most of the gap without any ML infrastructure. Unlike plain-file baselines, Mem-OS adds integrity checking, governance, and agent-agnostic shared memory via MCP that no other system provides.
 
 ---
 
