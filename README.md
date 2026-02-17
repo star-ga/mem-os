@@ -99,33 +99,40 @@ Mem-OS recall engine evaluated on two standard long-term memory benchmarks. Zero
 
 Same pipeline as Mem0 and Letta evaluations: retrieve context via BM25, generate answer with LLM, score against gold reference with judge LLM. Directly comparable methodology.
 
-| Judge Model | N | Accuracy (≥50) | Mean Score |
-|---|---|---|---|
-| **gpt-4o-mini** | **304** | **64.5%** | **57.0** |
-| mistral-large | 1986 | 49.7% | 43.6 |
+| Pipeline | Judge Model | N | Accuracy (≥50) | Mean Score |
+|---|---|---|---|---|
+| **BM25** | gpt-4o-mini | 1986 | **58.5%** | 54.3 |
 
-Category breakdown (gpt-4o-mini):
+Category breakdown (gpt-4o-mini, BM25, all 10 conversations):
 
 | Category | N | Accuracy (≥50) | Mean Score |
 |---|---|---|---|
-| **Overall** | **304** | **64.5%** | **57.0** |
-| Open-domain | 114 | 82.5% | 71.2 |
-| Temporal | 13 | 92.3% | 79.2 |
-| Single-hop | 43 | 69.8% | 54.1 |
-| Adversarial | 71 | 46.5% | 44.9 |
-| Multi-hop | 63 | 42.9% | 42.4 |
+| **Overall** | **1986** | **58.5%** | **54.3** |
+| Open-domain | 841 | 75.7% | 68.1 |
+| Temporal | 96 | 67.7% | 61.1 |
+| Single-hop | 282 | 56.4% | 50.7 |
+| Multi-hop | 321 | 46.1% | 43.3 |
+| Adversarial | 446 | 34.3% | 37.4 |
 
-> **Judge model:** `gpt-4o-mini` (answerer + judge). Same model used by Mem0 and Letta evaluations — directly comparable. gpt-4o-mini results cover 2/10 conversations (304 questions); full run in progress.
+> **Judge model:** `gpt-4o-mini` (answerer + judge). Same model used by Mem0 and Letta evaluations — directly comparable. Full run: 1986 questions across 10 conversations, 82.6 minutes.
 
-**How it compares:**
+**Competitive landscape:**
 
 | System | LoCoMo Score | Judge Model | Approach |
 |---|---|---|---|
+| Memobase | 75.8% | — | Specialized memory extraction |
 | **Letta** (files) | 74.0% | gpt-4o-mini | Plain files + agent tool use |
 | **Mem0** (graph) | 68.5% | gpt-4o-mini | Graph memory + LLM extraction |
-| **Mem-OS** (BM25) | **64.5%** | gpt-4o-mini | BM25 recall + Markdown files |
+| **Mem-OS** (BM25) | **58.5%** | gpt-4o-mini | BM25 recall + Markdown files |
 
-> Mem-OS reaches **94%** of Mem0's graph memory score using pure BM25 lexical search — no embeddings, no vector DB, no cloud calls, zero dependencies. The remaining gap vs. Letta's 74% reflects the advantage of agent-driven file retrieval over single-shot BM25. Mem-OS's unique value is in memory **governance** — contradiction detection, drift analysis, audit trails — an area these benchmarks do not measure.
+> Mem-OS reaches **85%** of Mem0's graph memory score using pure BM25 lexical search — no embeddings, no vector DB, no cloud calls, zero dependencies. The gap reflects single-shot BM25 vs. graph/semantic retrieval; optional observation compression (`--compress`) and vector recall backends can close this further. Mem-OS's unique value is in memory **governance** — contradiction detection, drift analysis, audit trails — an area these benchmarks do not measure.
+
+**Pipeline modes:**
+
+| Pipeline | API Calls/Q | Description |
+|---|---|---|
+| `BM25` | 2 | Retrieve → Answer → Judge (default) |
+| `BM25 + Compress` | 3 | Retrieve → Compress → Answer → Judge (`--compress`) |
 
 Run benchmarks yourself:
 ```bash
@@ -135,7 +142,10 @@ python3 benchmarks/longmemeval_harness.py
 
 # LLM-as-judge (accuracy metrics, requires API key)
 python3 benchmarks/locomo_judge.py --dry-run
-python3 benchmarks/locomo_judge.py --answerer-model mistral-small-latest --output results.json
+python3 benchmarks/locomo_judge.py --answerer-model gpt-4o-mini --output results.json
+
+# With observation compression (higher accuracy, 3 API calls per question)
+python3 benchmarks/locomo_judge.py --answerer-model gpt-4o-mini --compress --output results.json
 ```
 
 ### Persistent Memory
@@ -460,7 +470,7 @@ Compared against every major memory solution for AI agents (as of 2026):
 | **LangMem** | Native LangChain/LangGraph integration | Tied to LangChain ecosystem |
 | **Cognee** | Advanced chunking, web content bridging | Research-oriented, complex setup |
 | **Graphlit** | Multimodal ingestion, semantic search, managed platform | Cloud-only, managed service |
-| **Mem OS** | Integrity + governance + zero deps + local-first, 64.5% LoCoMo with pure BM25 | Lexical recall by default (vector optional) |
+| **Mem OS** | Integrity + governance + zero deps + local-first, 58.5% LoCoMo with pure BM25 | Lexical recall by default (vector + compression optional) |
 
 ### The Gap Mem OS Fills
 
@@ -483,7 +493,7 @@ Letta's August 2025 analysis showed that a plain-file baseline (full conversatio
 - **Overhead hurts.** Specialized pipelines introduce failure modes (bad embeddings, chunking errors, stale indexes) that simple file access avoids.
 - **For text-heavy agentic use cases, "how well the agent manages context" > "how smart the retrieval index is."**
 
-Mem-OS's Markdown-file + BM25 approach validates these findings: **64.5% on LoCoMo** with zero dependencies, no embeddings, and no vector database — within striking distance of Mem0's 68.5% graph memory. And unlike plain-file baselines, Mem-OS adds integrity checking and governance that no other system provides.
+Mem-OS's Markdown-file + BM25 approach validates these findings: **58.5% on LoCoMo** with zero dependencies, no embeddings, and no vector database. The observation compression pipeline (`--compress`) adds an LLM-based compression step between retrieval and answering, distilling raw blocks into focused factual observations. Unlike plain-file baselines, Mem-OS adds integrity checking and governance that no other system provides.
 
 ---
 

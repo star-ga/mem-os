@@ -10,10 +10,10 @@ dist/
 temp_workspace/
 reproduce_*.py
 
-# Benchmark caches and dry-run results
+# Benchmark caches and results (regenerated via benchmark scripts)
 benchmarks/.cache/
 benchmarks/locomo_results.json
-benchmarks/locomo_judge_results.json
+benchmarks/locomo_judge_results*.json
 benchmarks/*.partial
 benchmarks/*.jsonl
 
