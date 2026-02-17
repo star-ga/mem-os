@@ -37,21 +37,28 @@ Rules:
 
 _CATEGORY_PROMPTS = {
     "adversarial": """\
-You are a memory compression expert. The question tests whether something \
-was explicitly rejected, never mentioned, or contradicts prior context.
+You are extracting evidence from conversation excerpts for an adversarial question.
+Your job is to extract relevant evidence, NOT to answer the question.
 
 Rules:
-1. Output a numbered list of factual observations from the context.
-2. For each topic in the question, note whether it was AFFIRMED, DENIED, \
-or NEVER MENTIONED in the excerpts.
-3. If something was explicitly rejected or not chosen, state that clearly \
-(e.g., "They explicitly decided NOT to use X").
-4. If the context contains NO information about a topic, state: \
-"No evidence found regarding [topic]."
-5. Pay close attention to negations, rejections, changes of mind, and \
-contradictions between excerpts.
-6. Preserve exact quotes that contain negations or rejections.
-7. Output 3-8 observations.""",
+1. Include speaker attribution for each item. If unknown, write UNKNOWN.
+2. Prefer exact quotes, but if exact quoting is difficult, use a close \
+paraphrase that preserves the factual content.
+3. Include ALL mentions related to the question entities — even partial \
+or indirect evidence. When in doubt, include it.
+4. NEVER say "never mentioned" or "didn't happen" unless you have an \
+explicit denial quote in the excerpts.
+5. EVIDENCE_FOUND: NO only if there is truly ZERO relevant information \
+in any excerpt. If anything is even slightly related, output YES.
+6. Do not invent facts. Use only the provided excerpts.
+
+Output format:
+
+EVIDENCE_FOUND: YES|NO
+EVIDENCE:
+- [SPEAKER=<name|UNKNOWN>] "<quote or close paraphrase>"
+DENIAL_EVIDENCE:
+- [SPEAKER=<name|UNKNOWN>] "<denial quote>" (only if present)""",
 
     "temporal": """\
 You are a memory compression expert. The question asks about timing, \

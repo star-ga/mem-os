@@ -420,19 +420,15 @@ your-workspace/
 
 Compared against every major memory solution for AI agents (as of 2026):
 
-<table><tr><td>
-
-<sup>
-
 | | [Mem0](https://github.com/mem0ai/mem0) | [SMem](https://supermemory.ai) | [c-mem](https://github.com/thedotmack/claude-mem) | [Letta](https://www.letta.com) | [Zep](https://www.getzep.com) | [LMem](https://github.com/langchain-ai) | [Cognee](https://www.cognee.ai) | [Gphlt](https://www.graphlit.com) | **Mem OS** |
 |:--|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
 | **Recall** | | | | | | | | | |
-| Vector | Cloud | Cloud | Chroma | ✓ | ✓ | ✓ | ✓ | ✓ | **Opt** |
+| Vector | Cloud | Cloud | Chroma | ✓ | ✓ | ✓ | ✓ | ✓ | **Optional** |
 | Lexical | Filter | — | — | — | — | — | — | — | **BM25F** |
 | Graph | ✓ | — | — | — | ✓ | — | ✓ | ✓ | **2-hop** |
-| Hybrid | Part | — | — | — | ✓ | — | ✓ | ✓ | **BM25F+G+V** |
+| Hybrid | Part | — | — | — | ✓ | — | ✓ | ✓ | **BM25F + Graph + Vector** |
 | **Persistence** | | | | | | | | | |
-| Structured | JSON | JSON | SQL | Blk | Grph | KV | Grph | Grph | **MD blk** |
+| Structured | JSON | JSON | SQL | Blk | Grph | KV | Grph | Grph | **Markdown blocks** |
 | Entities | ✓ | ✓ | — | ✓ | ✓ | ✓ | ✓ | ✓ | **✓** |
 | Temporal | — | — | — | — | ✓ | — | — | — | **✓** |
 | Supersede | — | — | — | ✓ | ✓ | — | — | — | **✓** |
@@ -440,18 +436,18 @@ Compared against every major memory solution for AI agents (as of 2026):
 | **Integrity** | | | | | | | | | |
 | Contradictions | — | — | — | — | — | — | — | — | **✓** |
 | Drift | — | — | — | — | — | — | — | — | **✓** |
-| Validation | — | — | — | — | — | — | — | — | **74+** |
+| Validation | — | — | — | — | — | — | — | — | **74+ rules** |
 | Impact graph | — | — | — | — | — | — | — | — | **✓** |
 | Coverage | — | — | — | — | — | — | — | — | **✓** |
-| Multi-agent | — | — | — | ✓ | — | — | — | — | **ACL** |
-| Conflict res. | — | — | — | — | — | — | — | — | **Auto** |
+| Multi-agent | — | — | — | ✓ | — | — | — | — | **ACL-based** |
+| Conflict res. | — | — | — | — | — | — | — | — | **Automatic** |
 | WAL/crash | — | — | — | — | — | — | — | — | **✓** |
 | Backup | — | — | — | — | — | — | — | — | **✓** |
 | **Governance** | | | | | | | | | |
 | Auto-capture | Auto | Auto | Auto | Self | Ext | Ext | Ext | Ing | **Propose** |
 | Proposal queue | — | — | — | — | — | — | — | — | **✓** |
 | Rollback | — | — | — | — | — | — | — | — | **✓** |
-| Mode gov. | — | — | — | — | — | — | — | — | **3** |
+| Mode gov. | — | — | — | — | — | — | — | — | **3 modes** |
 | Audit | — | Part | — | — | — | — | — | — | **Full** |
 | **Operations** | | | | | | | | | |
 | Local-only | — | — | ✓ | — | — | — | — | — | **✓** |
@@ -460,10 +456,6 @@ Compared against every major memory solution for AI agents (as of 2026):
 | Git-friendly | — | — | — | Part | — | — | — | — | **✓** |
 | OpenClaw | — | Plug | Plug | — | — | Plug | — | — | **Native** |
 | MCP server | — | — | — | — | — | — | — | — | **✓** |
-
-</sup>
-
-</td></tr></table>
 
 ### What Each Tool Does Best
 

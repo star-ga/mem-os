@@ -226,7 +226,12 @@ IMPORTANT RULES:
    People often imply things in conversation — use common sense and logical reasoning.
 3. Always give your best answer. Even if evidence is incomplete, provide the most likely answer
    based on what the context suggests.
-4. Be concise and direct — answer in 1-2 sentences."""
+4. Be concise and direct — answer in 1-2 sentences.
+5. Always specify the correct speaker/actor (e.g., "Tim did X" not just "X happened").
+   Verify names before answering — do not confuse speakers.
+6. Never use absolute negative language ("never", "not mentioned", "doesn't exist") unless
+   you have confirmed absence across ALL provided context. Absence of evidence is not
+   evidence of absence."""
 
 ANSWER_USER_TEMPLATE = """\
 Context from conversation memory:
@@ -258,14 +263,22 @@ Score the generated answer against the reference. An answer that conveys the sam
 facts as the reference should score 70+. Output JSON only."""
 
 ADVERSARIAL_ANSWER_PROMPT = """\
-Context from conversation memory:
+Answer the ADVERSARIAL question using ONLY the extracted evidence below.
+
 {context}
 
 Question: {question}
 
-Think step-by-step through the evidence in the context.
-Give the best, most accurate answer you can based on the available information.
-Be concise and direct — answer in 1-2 sentences."""
+Hard rules:
+1. Cite evidence BEFORE making a claim. If EVIDENCE_FOUND=NO, do NOT answer \
+"No" or "Never mentioned". Instead answer: "Not found in the retrieved evidence."
+2. Never claim "never mentioned" unless DENIAL_EVIDENCE contains an explicit \
+denial that directly matches the asked claim.
+3. Always include speaker attribution in your answer (who said or did it).
+4. If speaker attribution is missing or ambiguous, say so explicitly.
+5. Keep the answer short and literal. No extra speculation.
+
+FINAL_ANSWER (1-2 sentences):"""
 
 
 # ---------------------------------------------------------------------------
@@ -304,6 +317,9 @@ def format_context(retrieved: list[dict], max_chars: int = 6000) -> str:
         parts.append(part)
         total += len(part)
     return "\n".join(parts)
+
+
+    # Deterministic evidence packer lives in mem-os core (scripts/evidence_packer.py)
 
 
 def answer_question(
@@ -378,6 +394,7 @@ def evaluate_sample_with_judge(
     judge_model: str = "mistral-small-latest",
     rate_limit_delay: float = 0.1,
     compress: bool = False,
+    _jsonl_stream=None,
 ) -> list[dict]:
     """Run LLM-as-judge evaluation for one LoCoMo sample.
 
@@ -392,6 +409,7 @@ def evaluate_sample_with_judge(
 
     qa_pairs = sample.get("qa", [])
     results = []
+    _stats = {"packer": 0, "guard_filtered": 0, "llm_compress": 0}
 
     for qi, qa in enumerate(qa_pairs):
         question = qa.get("question", "")
@@ -410,27 +428,44 @@ def evaluate_sample_with_judge(
 
         # Step 1: Retrieve
         retrieved = recall(workspace, question, limit=top_k, active_only=False)
-        context = format_context(retrieved)
 
-        # Step 2: Compress (optional — observation layer)
-        if compress and context.strip():
-            try:
-                # Use the LoCoMo category name directly — it matches the
-                # compression prompt keys (adversarial/temporal/multi-hop).
-                compress_type = category if category in (
-                    "adversarial", "temporal", "multi-hop"
-                ) else None
-                context = compress_context(
-                    context, question, _llm_chat, model=answerer_model,
-                    query_type=compress_type,
-                )
-            except Exception as e:
-                pass  # Fall back to raw context on compression failure
+        # Step 2: Build context via mem-os evidence packer
+        from evidence_packer import pack_evidence, is_true_adversarial
+
+        if is_adversarial:
+            _stats["packer"] += 1
+            if not _stats.get("first_adv_qi"):
+                _stats["first_adv_qi"] = qi + 1
+                print(f"[milestone] first adversarial-labeled at q{qi+1}/{len(qa_pairs)}", flush=True)
+            context = pack_evidence(
+                retrieved, question=question, query_type="adversarial",
+            )
+            use_adversarial_prompt = is_true_adversarial(question)
+            if use_adversarial_prompt and not _stats.get("first_true_adv_qi"):
+                _stats["first_true_adv_qi"] = qi + 1
+                print(f"[milestone] first TRUE adversarial at q{qi+1}/{len(qa_pairs)}", flush=True)
+            if not use_adversarial_prompt:
+                _stats["guard_filtered"] += 1
+        else:
+            context = format_context(retrieved)
+            use_adversarial_prompt = False
+            if compress and context.strip():
+                try:
+                    compress_type = category if category in (
+                        "temporal", "multi-hop"
+                    ) else None
+                    context = compress_context(
+                        context, question, _llm_chat, model=answerer_model,
+                        query_type=compress_type,
+                    )
+                    _stats["llm_compress"] += 1
+                except Exception as e:
+                    pass  # Fall back to raw context on compression failure
 
         # Step 3: Answer
         try:
             generated = answer_question(
-                question, context, is_adversarial, model=answerer_model
+                question, context, use_adversarial_prompt, model=answerer_model
             )
         except Exception as e:
             generated = f"Error: {e}"
@@ -443,7 +478,7 @@ def evaluate_sample_with_judge(
         except Exception as e:
             judgment = {"score": 0, "reason": f"Judge error: {e}"}
 
-        results.append({
+        record = {
             "question": question,
             "category": category,
             "gold_answer": gold_answer,
@@ -451,7 +486,19 @@ def evaluate_sample_with_judge(
             "context_blocks": len(retrieved),
             "judge_score": judgment["score"],
             "judge_reason": judgment["reason"],
-        })
+        }
+        results.append(record)
+
+        # Stream to JSONL immediately (survives crashes, enables tail -f)
+        if _jsonl_stream is not None:
+            _jsonl_stream.write(json.dumps(record) + "\n")
+            _jsonl_stream.flush()
+
+        # Progress logging every 10 questions
+        if (qi + 1) % 10 == 0 or qi == len(qa_pairs) - 1:
+            print(f"[progress] {qi+1}/{len(qa_pairs)} "
+                  f"packer={_stats['packer']} guard={_stats['guard_filtered']} "
+                  f"compress={_stats['llm_compress']}", flush=True)
 
         # Rate limiting
         if rate_limit_delay > 0:
@@ -605,6 +652,9 @@ def _run_single_conv(conv_index: int, args) -> None:
     try:
         workspace = build_workspace(sample, conv_tmp)
 
+        # Open JSONL for streaming writes (each result appended immediately)
+        _jsonl_f = open(jsonl_path, "w")
+
         results = evaluate_sample_with_judge(
             sample, workspace,
             top_k=args.top_k,
@@ -612,11 +662,10 @@ def _run_single_conv(conv_index: int, args) -> None:
             judge_model=args.judge_model,
             rate_limit_delay=args.rate_limit,
             compress=args.compress,
+            _jsonl_stream=_jsonl_f,
         )
 
-        with open(jsonl_path, "w") as f:
-            for r in results:
-                f.write(json.dumps(r) + "\n")
+        _jsonl_f.close()
 
         if results:
             avg = sum(r["judge_score"] for r in results) / len(results)

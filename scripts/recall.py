@@ -512,13 +512,27 @@ def chunk_text(text: str, chunk_size: int = 3, overlap: int = 1) -> list[str]:
     return chunks if chunks else [text]
 
 
-def get_excerpt(block: dict, max_len: int = 120) -> str:
+def get_excerpt(block: dict, max_len: int = 300) -> str:
     """Get a short excerpt from a block."""
     for field in ("Statement", "Title", "Summary", "Description", "Name", "Context"):
         val = block.get(field, "")
         if isinstance(val, str) and val:
             return val[:max_len]
     return block.get("_id", "?")
+
+
+def _parse_speaker_from_tags(tags_str: str) -> str:
+    """Extract speaker name from Tags field. Tags format: 'FACT, Caroline'."""
+    if not tags_str:
+        return ""
+    parts = [t.strip() for t in tags_str.split(",")]
+    # First tag is the card type (FACT/EVENT/etc), rest are speaker/metadata
+    for p in parts[1:]:
+        if p and p[0].isupper() and p not in (
+            "FACT", "EVENT", "PREFERENCE", "RELATION", "NEGATION", "PLAN",
+        ):
+            return p
+    return ""
 
 
 def get_block_type(block_id: str) -> str:
@@ -811,11 +825,18 @@ def recall(workspace: str, query: str, limit: int = 10, active_only: bool = Fals
         if priority in ("P0", "P1"):
             score *= 1.1
 
+        # Build rich result payload with speaker + display text
+        raw_excerpt = get_excerpt(block)
+        tags_str = block.get("Tags", "")
+        speaker = _parse_speaker_from_tags(tags_str)
+
         result = {
             "_id": block.get("_id", "?"),
             "type": get_block_type(block.get("_id", "")),
             "score": round(score, 4),
-            "excerpt": get_excerpt(block),
+            "excerpt": raw_excerpt,
+            "speaker": speaker,
+            "tags": tags_str,
             "file": block.get("_source_file", "?"),
             "line": block.get("_line", 0),
             "status": status,
@@ -870,11 +891,14 @@ def recall(workspace: str, query: str, limit: int = 10, active_only: bool = Fals
         for nid, nscore in neighbor_scores.items():
             if nid not in score_by_id and nid in block_by_id:
                 nb = block_by_id[nid]
+                nb_tags = nb.get("Tags", "")
                 results.append({
                     "_id": nid,
                     "type": get_block_type(nid),
                     "score": round(nscore, 4),
                     "excerpt": get_excerpt(nb),
+                    "speaker": _parse_speaker_from_tags(nb_tags),
+                    "tags": nb_tags,
                     "file": nb.get("_source_file", "?"),
                     "line": nb.get("_line", 0),
                     "status": nb.get("Status", ""),
