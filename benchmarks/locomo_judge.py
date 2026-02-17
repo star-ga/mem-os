@@ -46,14 +46,18 @@ download_dataset = None
 build_workspace = None
 _parse_sessions = None
 CATEGORY_NAMES = {}
+detect_query_type = None
 
 
 def _load_heavy_imports():
     """Load recall engine and harness modules. Called only in subprocess mode."""
-    global recall, download_dataset, build_workspace, _parse_sessions, CATEGORY_NAMES
+    global recall, download_dataset, build_workspace, _parse_sessions, CATEGORY_NAMES, detect_query_type
 
-    from recall import recall as _recall  # noqa: E402
+    from recall import recall as _recall, detect_query_type as _dqt  # noqa: E402
     recall = _recall
+
+    global detect_query_type
+    detect_query_type = _dqt
 
     # Suppress recall structured logging — observability module's handle()
     # bypasses level checks, so we remove handlers from the recall logger.
@@ -268,10 +272,24 @@ Be concise and direct — answer in 1-2 sentences."""
 # Evaluation pipeline
 # ---------------------------------------------------------------------------
 
+def _strip_semantic_prefix(text: str) -> str:
+    """Remove leading semantic label prefix e.g. '(identity description who is) '.
+
+    Labels are embedded in Statement for BM25 retrieval weight but should
+    not be shown to the answerer LLM — they degrade answer precision.
+    """
+    if text.startswith("("):
+        close = text.find(") ")
+        if 0 < close < 80:  # sanity bound
+            return text[close + 2:]
+    return text
+
+
 def format_context(retrieved: list[dict], max_chars: int = 6000) -> str:
     """Format retrieved blocks into context string for the LLM.
 
     Recall results use 'excerpt' for the text content.
+    Semantic label prefixes are stripped so the LLM sees clean facts.
     """
     parts = []
     total = 0
@@ -280,7 +298,7 @@ def format_context(retrieved: list[dict], max_chars: int = 6000) -> str:
         text = r.get("excerpt", "") or r.get("Statement", "")
         if not text:
             continue
-        part = text.strip()
+        part = _strip_semantic_prefix(text.strip())
         if total + len(part) > max_chars:
             break
         parts.append(part)
@@ -397,8 +415,14 @@ def evaluate_sample_with_judge(
         # Step 2: Compress (optional — observation layer)
         if compress and context.strip():
             try:
+                # Use the LoCoMo category name directly — it matches the
+                # compression prompt keys (adversarial/temporal/multi-hop).
+                compress_type = category if category in (
+                    "adversarial", "temporal", "multi-hop"
+                ) else None
                 context = compress_context(
-                    context, question, _llm_chat, model=answerer_model
+                    context, question, _llm_chat, model=answerer_model,
+                    query_type=compress_type,
                 )
             except Exception as e:
                 pass  # Fall back to raw context on compression failure

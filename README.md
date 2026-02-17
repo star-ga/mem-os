@@ -420,47 +420,50 @@ your-workspace/
 
 Compared against every major memory solution for AI agents (as of 2026):
 
-<table style="font-size:0.8em">
-<thead>
-<tr><th>Capability</th><th><a href="https://github.com/mem0ai/mem0">Mem0</a></th><th><a href="https://supermemory.ai">Super&shy;memory</a></th><th><a href="https://github.com/thedotmack/claude-mem">claude-mem</a></th><th><a href="https://www.letta.com">Letta</a></th><th><a href="https://www.getzep.com">Zep</a></th><th><a href="https://github.com/langchain-ai">LangMem</a></th><th><a href="https://www.cognee.ai">Cognee</a></th><th><a href="https://www.graphlit.com">Graphlit</a></th><th><b>Mem&nbsp;OS</b></th></tr>
-</thead>
-<tbody>
-<tr><td colspan="10"><b>Recall & Search</b></td></tr>
-<tr><td>Semantic recall (vector)</td><td>Cloud</td><td>Cloud</td><td>ChromaDB</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td><b>Optional</b></td></tr>
-<tr><td>Lexical recall (keyword)</td><td>Filter</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td><b>BM25F + stemming</b></td></tr>
-<tr><td>Graph-based recall</td><td>Yes</td><td>—</td><td>—</td><td>—</td><td>Yes</td><td>—</td><td>Yes</td><td>Yes</td><td><b>2-hop xref boost</b></td></tr>
-<tr><td>Hybrid search</td><td>Partial</td><td>—</td><td>—</td><td>—</td><td>Yes</td><td>—</td><td>Yes</td><td>Yes</td><td><b>BM25F + graph + vector</b></td></tr>
-<tr><td colspan="10"><b>Memory Persistence</b></td></tr>
-<tr><td>Structured memory</td><td>JSON</td><td>JSON</td><td>SQLite</td><td>Blocks</td><td>Graph</td><td>KV</td><td>Graph</td><td>Graph</td><td><b>Markdown blocks</b></td></tr>
-<tr><td>Entity tracking</td><td>Yes</td><td>Yes</td><td>—</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td><b>Yes</b></td></tr>
-<tr><td>Temporal awareness</td><td>—</td><td>—</td><td>—</td><td>—</td><td>Yes</td><td>—</td><td>—</td><td>—</td><td><b>Yes (date-indexed)</b></td></tr>
-<tr><td>Supersede chains</td><td>—</td><td>—</td><td>—</td><td>Yes</td><td>Yes</td><td>—</td><td>—</td><td>—</td><td><b>Yes</b></td></tr>
-<tr><td>Append-only logs</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td><b>Yes</b></td></tr>
-<tr><td colspan="10"><b>Integrity & Safety</b></td></tr>
-<tr><td>Contradiction detection</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td><b>Yes (signatures)</b></td></tr>
-<tr><td>Drift analysis</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td><b>Yes</b></td></tr>
-<tr><td>Structural validation</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td><b>74+ checks</b></td></tr>
-<tr><td>Impact graph</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td><b>Yes</b></td></tr>
-<tr><td>Coverage scoring</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td><b>Yes</b></td></tr>
-<tr><td>Multi-agent namespaces</td><td>—</td><td>—</td><td>—</td><td>Yes</td><td>—</td><td>—</td><td>—</td><td>—</td><td><b>Yes (ACL + ledger)</b></td></tr>
-<tr><td>Conflict resolution</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td><b>Yes (auto-resolve)</b></td></tr>
-<tr><td>WAL / crash recovery</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td><b>Yes</b></td></tr>
-<tr><td>Backup / restore</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td><b>Yes</b></td></tr>
-<tr><td colspan="10"><b>Governance</b></td></tr>
-<tr><td>Auto-capture</td><td>Auto</td><td>Auto</td><td>Auto</td><td>Self-edit</td><td>Extract</td><td>Extract</td><td>Extract</td><td>Ingest</td><td><b>Proposal-based</b></td></tr>
-<tr><td>Proposal queue</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td><b>Yes</b></td></tr>
-<tr><td>Apply with rollback</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td><b>Yes</b></td></tr>
-<tr><td>Mode governance</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td><b>3 modes</b></td></tr>
-<tr><td>Audit trail</td><td>—</td><td>Partial</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td><b>Full</b></td></tr>
-<tr><td colspan="10"><b>Operations</b></td></tr>
-<tr><td>Local-only</td><td>—</td><td>—</td><td>Yes</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td><b>Yes</b></td></tr>
-<tr><td>Zero dependencies</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td><b>Yes (stdlib)</b></td></tr>
-<tr><td>No daemon required</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>Yes</td><td>—</td><td>—</td><td><b>Yes</b></td></tr>
-<tr><td>Git-friendly</td><td>—</td><td>—</td><td>—</td><td>Partial</td><td>—</td><td>—</td><td>—</td><td>—</td><td><b>Yes (Markdown)</b></td></tr>
-<tr><td>OpenClaw native</td><td>—</td><td>Plugin</td><td>Plugin</td><td>—</td><td>—</td><td>Plugin</td><td>—</td><td>—</td><td><b>Yes (hooks + skills)</b></td></tr>
-<tr><td>MCP server</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td><b>Yes (FastMCP)</b></td></tr>
-</tbody>
-</table>
+<table><tr><td>
+
+<sup>
+
+| | [Mem0](https://github.com/mem0ai/mem0) | [SMem](https://supermemory.ai) | [c-mem](https://github.com/thedotmack/claude-mem) | [Letta](https://www.letta.com) | [Zep](https://www.getzep.com) | [LMem](https://github.com/langchain-ai) | [Cognee](https://www.cognee.ai) | [Gphlt](https://www.graphlit.com) | **Mem OS** |
+|:--|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
+| **Recall** | | | | | | | | | |
+| Vector | Cloud | Cloud | Chroma | ✓ | ✓ | ✓ | ✓ | ✓ | **Opt** |
+| Lexical | Filter | — | — | — | — | — | — | — | **BM25F** |
+| Graph | ✓ | — | — | — | ✓ | — | ✓ | ✓ | **2-hop** |
+| Hybrid | Part | — | — | — | ✓ | — | ✓ | ✓ | **BM25F+G+V** |
+| **Persistence** | | | | | | | | | |
+| Structured | JSON | JSON | SQL | Blk | Grph | KV | Grph | Grph | **MD blk** |
+| Entities | ✓ | ✓ | — | ✓ | ✓ | ✓ | ✓ | ✓ | **✓** |
+| Temporal | — | — | — | — | ✓ | — | — | — | **✓** |
+| Supersede | — | — | — | ✓ | ✓ | — | — | — | **✓** |
+| Append-only | — | — | — | — | — | — | — | — | **✓** |
+| **Integrity** | | | | | | | | | |
+| Contradictions | — | — | — | — | — | — | — | — | **✓** |
+| Drift | — | — | — | — | — | — | — | — | **✓** |
+| Validation | — | — | — | — | — | — | — | — | **74+** |
+| Impact graph | — | — | — | — | — | — | — | — | **✓** |
+| Coverage | — | — | — | — | — | — | — | — | **✓** |
+| Multi-agent | — | — | — | ✓ | — | — | — | — | **ACL** |
+| Conflict res. | — | — | — | — | — | — | — | — | **Auto** |
+| WAL/crash | — | — | — | — | — | — | — | — | **✓** |
+| Backup | — | — | — | — | — | — | — | — | **✓** |
+| **Governance** | | | | | | | | | |
+| Auto-capture | Auto | Auto | Auto | Self | Ext | Ext | Ext | Ing | **Propose** |
+| Proposal queue | — | — | — | — | — | — | — | — | **✓** |
+| Rollback | — | — | — | — | — | — | — | — | **✓** |
+| Mode gov. | — | — | — | — | — | — | — | — | **3** |
+| Audit | — | Part | — | — | — | — | — | — | **Full** |
+| **Operations** | | | | | | | | | |
+| Local-only | — | — | ✓ | — | — | — | — | — | **✓** |
+| Zero deps | — | — | — | — | — | — | — | — | **✓** |
+| No daemon | — | — | — | — | — | ✓ | — | — | **✓** |
+| Git-friendly | — | — | — | Part | — | — | — | — | **✓** |
+| OpenClaw | — | Plug | Plug | — | — | Plug | — | — | **Native** |
+| MCP server | — | — | — | — | — | — | — | — | **✓** |
+
+</sup>
+
+</td></tr></table>
 
 ### What Each Tool Does Best
 

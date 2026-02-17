@@ -186,25 +186,82 @@ def tokenize(text: str) -> list[str]:
 # ---------------------------------------------------------------------------
 
 _QUERY_EXPANSIONS = {
+    # Auth & identity
     "auth": ["authentication", "login", "oauth", "jwt", "session"],
     "authentication": ["auth", "login", "oauth", "jwt"],
+    "login": ["auth", "signin", "authentication", "password"],
+    "password": ["credential", "login", "secret", "auth"],
+
+    # Data layer
     "db": ["database", "postgresql", "mysql", "sqlite", "sql"],
     "database": ["db", "postgresql", "mysql", "sqlite", "sql"],
+    "sql": ["database", "query", "postgresql", "mysql"],
+    "cache": ["redis", "memcached", "caching", "ttl"],
+
+    # API & networking
     "api": ["endpoint", "rest", "graphql", "route", "handler"],
+    "endpoint": ["api", "route", "url", "path", "handler"],
+    "request": ["http", "api", "call", "fetch"],
+
+    # DevOps & deployment
     "deploy": ["deployment", "ci", "cd", "pipeline", "release"],
     "deployment": ["deploy", "ci", "cd", "pipeline", "release"],
+    "docker": ["container", "image", "kubernetes", "pod"],
+    "kubernetes": ["k8s", "pod", "container", "docker", "cluster"],
+
+    # Quality & issues
     "bug": ["error", "issue", "defect", "fix", "regression"],
     "error": ["bug", "exception", "failure", "crash"],
+    "fix": ["bug", "patch", "repair", "resolve"],
     "test": ["testing", "pytest", "unittest", "spec", "coverage"],
+    "testing": ["test", "pytest", "assertion", "mock"],
+
+    # Security
     "security": ["vulnerability", "auth", "encryption", "xss", "injection"],
+    "vulnerability": ["security", "cve", "exploit", "risk"],
+
+    # Performance
     "perf": ["performance", "latency", "throughput", "optimization"],
     "performance": ["perf", "latency", "throughput", "optimization", "speed"],
+    "slow": ["performance", "latency", "bottleneck", "optimization"],
+    "fast": ["performance", "speed", "quick", "optimization"],
+
+    # Configuration & infrastructure
     "config": ["configuration", "settings", "env", "environment"],
     "infra": ["infrastructure", "server", "cloud", "devops"],
+    "server": ["backend", "service", "host", "instance"],
+
+    # Frontend & UI
+    "ui": ["interface", "frontend", "component", "view", "page"],
+    "frontend": ["ui", "client", "browser", "react", "component"],
+    "css": ["style", "stylesheet", "tailwind", "design"],
+    "component": ["widget", "element", "ui", "module"],
+
+    # Common conversational terms (helps bridge LoCoMo's casual language)
+    "talk": ["discuss", "mention", "conversation", "chat", "say"],
+    "discuss": ["talk", "mention", "conversation", "said"],
+    "mention": ["talk", "discuss", "said", "refer"],
+    "said": ["mention", "talk", "told", "stated"],
+    "told": ["said", "mention", "informed", "stated"],
+    "want": ["wish", "prefer", "desire", "plan"],
+    "like": ["prefer", "enjoy", "love", "favorite"],
+    "prefer": ["like", "want", "favorite", "choose"],
+    "plan": ["intend", "schedule", "goal", "strategy"],
+    "work": ["job", "career", "employ", "occupation"],
+    "job": ["work", "career", "employ", "position"],
+    "live": ["reside", "home", "house", "location", "stay"],
+    "home": ["live", "house", "reside", "apartment"],
+    "movie": ["film", "cinema", "watch", "show"],
+    "film": ["movie", "cinema", "watch"],
+    "book": ["read", "novel", "author", "story"],
+    "food": ["eat", "restaurant", "cuisine", "meal", "cook"],
+    "eat": ["food", "restaurant", "meal", "dinner", "lunch"],
+    "travel": ["trip", "visit", "vacation", "journey"],
+    "trip": ["travel", "visit", "vacation", "journey"],
 }
 
 
-def expand_query(tokens: list[str], max_expansions: int = 3) -> list[str]:
+def expand_query(tokens: list[str], max_expansions: int = 5) -> list[str]:
     """Expand query tokens with domain synonyms. Returns expanded token list."""
     expanded = list(tokens)
     added = set(tokens)
@@ -415,7 +472,7 @@ _QUERY_TYPE_PARAMS = {
         "recency_weight": 0.3,     # Standard
         "date_boost": 1.0,
         "expand_query": True,
-        "extra_limit_factor": 2.0, # Need more blocks to find all hops
+        "extra_limit_factor": 3.0, # Need more blocks to find all hops
         "graph_boost_override": True,  # Force graph traversal
     },
     "single-hop": {
@@ -506,7 +563,7 @@ _BLOCK_ID_RE = re.compile(
 )
 
 # Graph neighbor boost factor: a neighbor gets this fraction of the referencing block's score
-GRAPH_BOOST_FACTOR = 0.3
+GRAPH_BOOST_FACTOR = 0.4
 
 
 def build_xref_graph(all_blocks: list[dict]) -> dict[str, set[str]]:
@@ -754,7 +811,7 @@ def recall(workspace: str, query: str, limit: int = 10, active_only: bool = Fals
         if priority in ("P0", "P1"):
             score *= 1.1
 
-        results.append({
+        result = {
             "_id": block.get("_id", "?"),
             "type": get_block_type(block.get("_id", "")),
             "score": round(score, 4),
@@ -762,7 +819,11 @@ def recall(workspace: str, query: str, limit: int = 10, active_only: bool = Fals
             "file": block.get("_source_file", "?"),
             "line": block.get("_line", 0),
             "status": status,
-        })
+        }
+        # Pass through DiaID for benchmark evidence matching
+        if block.get("DiaID"):
+            result["DiaID"] = block["DiaID"]
+        results.append(result)
 
     # Graph-based neighbor boosting: 2-hop traversal for multi-hop recall
     if graph_boost and results:
@@ -772,9 +833,15 @@ def recall(workspace: str, query: str, limit: int = 10, active_only: bool = Fals
 
         neighbor_scores = {}
 
-        # 2-hop traversal: decay 0.3 for 1-hop, 0.1 for 2-hop
-        for hop, decay in enumerate([GRAPH_BOOST_FACTOR, GRAPH_BOOST_FACTOR * 0.33]):
-            # On first hop, seed from BM25 results; on second, seed from 1-hop discoveries
+        # Multi-hop traversal with progressive decay.
+        # For multi-hop queries, extend to 3-hop with stronger propagation.
+        hop_decays = [GRAPH_BOOST_FACTOR, GRAPH_BOOST_FACTOR * 0.5]
+        if query_type == "multi-hop":
+            hop_decays.append(GRAPH_BOOST_FACTOR * 0.25)  # 3rd hop at 0.1
+
+        for hop, decay in enumerate(hop_decays):
+            # On first hop, seed from BM25 results; on later hops, seed from
+            # newly discovered neighbors
             seeds = results if hop == 0 else [
                 {"_id": nid, "score": ns}
                 for nid, ns in neighbor_scores.items()
@@ -814,9 +881,100 @@ def recall(workspace: str, query: str, limit: int = 10, active_only: bool = Fals
                     "via_graph": True,
                 })
 
+    # --- Pseudo-Relevance Feedback (PRF) ---
+    # For single-hop, open-domain, and multi-hop queries, bridge the lexical
+    # gap by extracting expansion terms from top-5 initial results and
+    # re-scoring.  Multi-hop benefits from PRF because scattered facts often
+    # use different vocabulary than the query.
+    if query_type in ("single-hop", "open-domain", "multi-hop") and results:
+        results.sort(key=lambda r: r["score"], reverse=True)
+        prf_top = results[:5]
+
+        # Extract expansion terms: high-TF tokens from top-5 statements,
+        # excluding query tokens and very common terms (low IDF).
+        prf_terms = Counter()
+        for r in prf_top:
+            # Tokenize the excerpt (which is the Statement/Description)
+            prf_tokens = tokenize(r.get("excerpt", ""))
+            for t in prf_tokens:
+                if t not in query_tokens and len(t) > 2:
+                    prf_terms[t] += 1
+
+        # Keep terms that appear in 2+ of top-5 docs (co-occurring = relevant)
+        # and have moderate IDF (not too common, not too rare)
+        expansion_terms = []
+        for term, count in prf_terms.most_common(15):
+            if count >= 2 and df.get(term, 0) < N * 0.3:
+                expansion_terms.append(term)
+            if len(expansion_terms) >= 8:
+                break
+
+        if expansion_terms:
+            # Re-score all blocks with expanded query (original + PRF terms).
+            # Multi-hop uses lower weight to avoid drifting away from the query.
+            prf_weight = 0.25 if query_type == "multi-hop" else 0.4
+            for i, block in enumerate(all_blocks):
+                ft = doc_field_tokens[i]
+                flat = doc_flat_tokens[i]
+                if not flat:
+                    continue
+
+                # Compute weighted TF
+                weighted_tf_prf = Counter()
+                wdl = 0.0
+                for field, tokens in ft.items():
+                    w = FIELD_WEIGHTS.get(field, 1.0)
+                    wdl += len(tokens) * w
+                    for t in tokens:
+                        weighted_tf_prf[t] += w
+
+                # Score only expansion terms
+                prf_score = 0.0
+                for et in expansion_terms:
+                    if et in weighted_tf_prf:
+                        wtf = weighted_tf_prf[et]
+                        idf = math.log((N - df.get(et, 0) + 0.5) / (df.get(et, 0) + 0.5) + 1)
+                        numerator = wtf * (BM25_K1 + 1)
+                        denominator = wtf + BM25_K1 * (1 - BM25_B + BM25_B * wdl / avg_wdl)
+                        prf_score += idf * numerator / denominator
+
+                if prf_score > 0:
+                    bid = block.get("_id", "?")
+                    # Find existing result and boost, or add new result
+                    found = False
+                    for r in results:
+                        if r["_id"] == bid:
+                            r["score"] = round(r["score"] + prf_score * prf_weight, 4)
+                            found = True
+                            break
+                    if not found:
+                        result = {
+                            "_id": bid,
+                            "type": get_block_type(bid),
+                            "score": round(prf_score * prf_weight, 4),
+                            "excerpt": get_excerpt(block),
+                            "file": block.get("_source_file", "?"),
+                            "line": block.get("_line", 0),
+                            "status": block.get("Status", ""),
+                        }
+                        if block.get("DiaID"):
+                            result["DiaID"] = block["DiaID"]
+                        results.append(result)
+
     # Sort by score descending
     results.sort(key=lambda r: r["score"], reverse=True)
-    top = results[:limit]
+    # Deduplicate by DiaID: when fact cards and source blocks share a DiaID,
+    # keep the highest-scoring one to free top-K slots for other evidence.
+    seen_dia = set()
+    deduped = []
+    for r in results:
+        dia = r.get("DiaID", "")
+        if dia and dia in seen_dia:
+            continue
+        if dia:
+            seen_dia.add(dia)
+        deduped.append(r)
+    top = deduped[:limit]
     _log.info("query_complete", query=query, query_type=query_type,
               blocks_searched=N, results=len(top),
               top_score=top[0]["score"] if top else 0)

@@ -114,6 +114,10 @@ def build_workspace(sample: dict, base_dir: str) -> str:
     containing all dialog turns as blocks. Each turn becomes a block with its
     dia_id (e.g., D1:3) embedded so we can match against QA evidence.
 
+    Also runs the entity extractor to produce atomic fact cards alongside
+    the raw conversation blocks. Fact cards are short, precisely attributed
+    statements that BM25 can match more accurately than full conversation turns.
+
     Returns the workspace path.
     """
     sample_id = sample.get("sample_id", "unknown")
@@ -125,6 +129,11 @@ def build_workspace(sample: dict, base_dir: str) -> str:
 
     conversation = sample.get("conversation", {})
     sessions = _parse_sessions(conversation)
+
+    # Speaker name lookup
+    speaker_a = conversation.get("speaker_a", "speaker_a")
+    speaker_b = conversation.get("speaker_b", "speaker_b")
+    speaker_names = {"speaker_a": speaker_a, "speaker_b": speaker_b}
 
     for session_num, date_str, turns in sessions:
         for turn in turns:
@@ -144,6 +153,24 @@ def build_workspace(sample: dict, base_dir: str) -> str:
             lines.append(f"DiaID: {dia_id}")
             lines.append(f"Tags: session-{session_num}, {speaker}")
             lines.append("")
+
+    # --- Entity extraction: produce atomic fact cards ---
+    try:
+        from extractor import extract_from_conversation, format_as_blocks
+
+        fact_counter = 1
+        for session_num, date_str, turns in sessions:
+            cards = extract_from_conversation(
+                turns, speaker_a, speaker_b, date_str,
+            )
+            if cards:
+                block_text = format_as_blocks(
+                    cards, id_prefix="FACT", counter_start=fact_counter,
+                )
+                lines.append(block_text)
+                fact_counter += len(cards)
+    except ImportError:
+        pass  # extractor not available, skip
 
     decisions_path = os.path.join(decisions_dir, "DECISIONS.md")
     with open(decisions_path, "w", encoding="utf-8") as f:
