@@ -16,15 +16,14 @@ Usage:
 from __future__ import annotations
 
 import hashlib
-import json
 import os
 import re
 import sys
 from collections import Counter
-from datetime import datetime, timedelta
+from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from capture import append_signals, content_hash, CONFIDENCE_TO_PRIORITY
+from capture import append_signals
 from filelock import FileLock
 from observability import get_logger, metrics
 from transcript_capture import parse_transcript, find_recent_transcripts, TRANSCRIPT_PATTERNS

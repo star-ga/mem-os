@@ -21,11 +21,11 @@ import sys
 from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from capture import append_signals, scan_log, find_all_logs, content_hash
+from capture import append_signals, scan_log, find_all_logs
 from transcript_capture import parse_transcript, scan_transcript, find_recent_transcripts
 from session_summarizer import write_summary
 from entity_ingest import extract_entities, filter_new_entities, load_existing_entities, entities_to_signals
-from observability import get_logger, metrics
+from observability import get_logger
 
 _log = get_logger("bootstrap_corpus")
 
@@ -53,7 +53,7 @@ def main() -> None:
     today = datetime.now().strftime("%Y-%m-%d")
     dry_run = args.dry_run
 
-    print(f"mem-os Bootstrap Corpus")
+    print("mem-os Bootstrap Corpus")
     print(f"  Workspace: {ws}")
     print(f"  Dry run:   {dry_run}")
     print(f"  Date:      {today}")

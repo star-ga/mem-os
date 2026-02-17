@@ -26,7 +26,7 @@ import sys
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from observability import get_logger, metrics, timed
+from observability import get_logger, metrics
 
 _log = get_logger("cron_runner")
 
