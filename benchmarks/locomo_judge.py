@@ -83,6 +83,10 @@ def _load_heavy_imports():
 
 def _load_env():
     """Load API keys from ~/.claude-ultimate/.env if not already set."""
+    _ALLOWED_ENV_KEYS = {
+        "MISTRAL_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY",
+        "XAI_API_KEY", "DEEPSEEK_API_KEY", "PERPLEXITY_API_KEY",
+    }
     env_path = os.path.expanduser("~/.claude-ultimate/.env")
     if os.path.isfile(env_path):
         with open(env_path, "r") as f:
@@ -90,8 +94,9 @@ def _load_env():
                 line = line.strip()
                 if line and not line.startswith("#") and "=" in line:
                     key, _, val = line.partition("=")
-                    if key.strip() and not os.environ.get(key.strip()):
-                        os.environ[key.strip()] = val.strip()
+                    key = key.strip()
+                    if key in _ALLOWED_ENV_KEYS and not os.environ.get(key):
+                        os.environ[key] = val.strip()[:512]
 
 _load_env()
 
@@ -373,8 +378,9 @@ def judge_answer(
             if raw.startswith("json"):
                 raw = raw[4:]
         result = json.loads(raw.strip())
+        score = max(0, min(100, int(result.get("score", 0))))
         return {
-            "score": int(result.get("score", 0)),
+            "score": score,
             "reason": str(result.get("reason", "")),
         }
     except (json.JSONDecodeError, ValueError, IndexError):
@@ -382,7 +388,8 @@ def judge_answer(
         import re
         m = re.search(r'"score"\s*:\s*(\d+)', raw)
         if m:
-            return {"score": int(m.group(1)), "reason": raw[:200]}
+            score = max(0, min(100, int(m.group(1))))
+            return {"score": score, "reason": raw[:200]}
         return {"score": 0, "reason": f"Parse error: {raw[:200]}"}
 
 
@@ -811,12 +818,17 @@ def main():
                     line = line.strip()
                     if not line:
                         continue
-                    r = json.loads(line)
-                    cat = r["category"]
-                    if cat not in score_agg:
-                        score_agg[cat] = []
-                    score_agg[cat].append(r["judge_score"])
-                    total_questions += 1
+                    try:
+                        r = json.loads(line)
+                        cat = r.get("category", "unknown")
+                        score = r.get("judge_score", 0)
+                        if not isinstance(score, (int, float)):
+                            score = 0
+                        score = max(0, min(100, int(score)))
+                        score_agg.setdefault(cat, []).append(score)
+                        total_questions += 1
+                    except (json.JSONDecodeError, TypeError, ValueError) as exc:
+                        print(f"[judge] WARNING: skipping malformed JSONL line: {exc}")
 
             # Save partial metrics after each conversation
             if score_agg:
@@ -855,8 +867,12 @@ def main():
             with open(jsonl_path, "r") as f:
                 for line in f:
                     line = line.strip()
-                    if line:
+                    if not line:
+                        continue
+                    try:
                         per_question.append(json.loads(line))
+                    except json.JSONDecodeError:
+                        pass  # skip malformed lines
 
     engine_label = "mem-os-recall-bm25+compress" if args.compress else "mem-os-recall-bm25"
     output_data = {
