@@ -1,6 +1,6 @@
 {
   "name": "mem-os",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "private": false,
   "description": "Memory + Immune System for AI agents — local-first, auditable, governance-aware",
   "author": "STARGA Inc <noreply@star.ga>",
@@ -21,7 +21,7 @@
     "claude-code-plugin"
   ],
   "engines": {
-    "python": ">=3.8"
+    "python": ">=3.10"
   },
   "scripts": {
     "init": "python3 scripts/init_workspace.py",

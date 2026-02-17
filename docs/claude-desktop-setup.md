@@ -5,7 +5,7 @@ Set up Mem-OS as an MCP server in Claude Desktop in under 5 minutes.
 ## Prerequisites
 
 - [Claude Desktop](https://claude.ai/download) installed
-- Python 3.8+
+- Python 3.10+
 - `fastmcp` installed: `pip install "fastmcp>=2.0"`
 
 ## 1. Clone Mem-OS

@@ -9,7 +9,7 @@
   <p align="center">
     <a href="https://github.com/star-ga/mem-os/blob/main/LICENSE"><img src="https://img.shields.io/github/license/star-ga/mem-os?style=flat-square&color=blue" alt="License"></a>
     <a href="https://github.com/star-ga/mem-os/releases"><img src="https://img.shields.io/github/v/release/star-ga/mem-os?style=flat-square&color=green" alt="Release"></a>
-    <img src="https://img.shields.io/badge/python-3.8%2B-blue?style=flat-square&logo=python&logoColor=white" alt="Python 3.8+">
+    <img src="https://img.shields.io/badge/python-3.10%2B-blue?style=flat-square&logo=python&logoColor=white" alt="Python 3.10+">
     <img src="https://img.shields.io/badge/dependencies-zero-brightgreen?style=flat-square" alt="Zero Dependencies">
     <img src="https://img.shields.io/badge/OpenClaw-2026.2-purple?style=flat-square&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0id2hpdGUiPjxwYXRoIGQ9Ik0xMiAyQzYuNDggMiAyIDYuNDggMiAxMnM0LjQ4IDEwIDEwIDEwIDEwLTQuNDggMTAtMTBTMTcuNTIgMiAxMiAyem0wIDE4Yy00LjQyIDAtOC0zLjU4LTgtOHMzLjU4LTggOC04IDggMy41OCA4IDgtMy41OCA4LTggOHoiLz48L3N2Zz4=" alt="OpenClaw 2026.2">
   </p>
@@ -787,6 +787,22 @@ Add to `~/.claude/claude_desktop_config.json`:
 }
 ```
 
+### Claude Code
+
+Add to `~/.claude/mcp.json` (global) or `.mcp.json` (per-project):
+
+```json
+{
+  "mcpServers": {
+    "mem-os": {
+      "command": "python3",
+      "args": ["/path/to/mem-os/mcp_server.py"],
+      "env": {"MEM_OS_WORKSPACE": "/path/to/your/workspace"}
+    }
+  }
+}
+```
+
 ### Cursor / Windsurf
 
 Add to your MCP config (`.cursor/mcp.json` or equivalent):
@@ -881,7 +897,7 @@ Drop-in `.mcp.json` manifest lets MCP clients auto-discover the server:
 
 ## Requirements
 
-- **Python 3.8+**
+- **Python 3.10+**
 - **Bash** (for hooks and validate.sh; optional — `validate_py.py` is the cross-platform alternative)
 - **No external packages** — stdlib only
 
@@ -906,7 +922,7 @@ Drop-in `.mcp.json` manifest lets MCP clients auto-discover the server:
 | Accidental overwrites | Proposal-based mutations only (never direct writes to source of truth) |
 | Rollback safety | Snapshot before every apply, atomic `os.replace()` for state files |
 | Symlink attacks | Symlink detection in restore_snapshot (both SNAPSHOT_DIRS and intel subdirs) |
-| Path traversal | All paths resolved via `os.path.abspath()`, workspace-relative only |
+| Path traversal | All paths resolved via `os.path.realpath()`, workspace-relative only |
 
 | What we do NOT protect against | Why |
 |---|---|
@@ -935,7 +951,7 @@ grep -rn "http\|socket\|urllib\|requests\|httpx" scripts/ | grep -v "^#\|\.pyc"
 | `capture` says "no daily log" | No `memory/YYYY-MM-DD.md` file for today. Write something first. |
 | `intel_scan` finds 0 contradictions | That's good — means no conflicting decisions. |
 | Tests fail on Windows | Use `validate_py.py` instead of `validate.sh`. Hooks require WSL. |
-| `pip install -e .` fails | Ensure Python 3.8+ and setuptools >= 64. |
+| `pip install -e .` fails | Ensure Python 3.10+ and setuptools >= 64. |
 
 ---
 

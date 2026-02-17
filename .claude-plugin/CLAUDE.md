@@ -2,9 +2,9 @@
 
 ## Available Commands
 - `/scan` — Run contradiction detection, drift analysis, impact graph, snapshot, briefing
-- `/validate` — Run structural integrity validation (74+ structural checks, 134 unit tests)
+- `/validate` — Run structural integrity validation (74+ structural checks, 478 unit tests)
 - `/apply <ProposalId>` — Apply a staged proposal with atomic rollback
-- `/recall <query>` — Search all memory files (TF-IDF + graph + optional vector)
+- `/recall <query>` — Search all memory files (BM25F + graph + optional vector)
 - `/status` — Health dashboard (contradictions, drift, coverage)
 - `/init` — Scaffold a new mem-os workspace
 
