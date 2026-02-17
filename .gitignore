@@ -14,7 +14,17 @@ reproduce_*.py
 benchmarks/.cache/
 benchmarks/locomo_results.json
 benchmarks/*.partial
+benchmarks/*.jsonl
 benchmarks/results/
+
+# Intermediate benchmark results (only v3 baseline + v9_1 final are committed)
+benchmarks/locomo_judge_results.json
+benchmarks/locomo_judge_results_4omini*.json
+benchmarks/locomo_judge_results_v4*.json
+benchmarks/locomo_judge_results_v5*.json
+benchmarks/locomo_judge_results_v6*.json
+benchmarks/dev_suite_*.json*
+benchmarks/results_d*.json*
 
 # Workspace artifacts (not part of repo)
 /maintenance/
