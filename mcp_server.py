@@ -54,6 +54,7 @@ Claude Desktop config (~/.claude/claude_desktop_config.json):
 
 from __future__ import annotations
 
+import hmac
 import json
 import os
 import sys
@@ -459,6 +460,35 @@ def _check_token() -> str | None:
     return os.environ.get("MEM_OS_TOKEN")
 
 
+def verify_token(headers: dict) -> bool:
+    """Verify Bearer token from request headers. Constant-time compare.
+
+    Returns True if:
+      - No token is configured (open access), or
+      - Token matches via Authorization: Bearer <token> or X-MemOS-Token header.
+
+    Returns False if token is configured but missing/invalid.
+    """
+    expected = _check_token()
+    if expected is None:
+        return True  # No auth configured — allow
+
+    # Try Authorization: Bearer <token>
+    auth = headers.get("authorization", headers.get("Authorization", ""))
+    if auth.startswith("Bearer "):
+        provided = auth[7:]
+        if hmac.compare_digest(provided, expected):
+            return True
+
+    # Try X-MemOS-Token header
+    alt = headers.get("x-memos-token", headers.get("X-MemOS-Token", ""))
+    if alt and hmac.compare_digest(alt, expected):
+        return True
+
+    metrics.inc("mcp_http_auth_failures")
+    return False
+
+
 def main():
     """Entry point for the MCP server (used by console_scripts and __main__)."""
     import argparse
@@ -481,6 +511,16 @@ def main():
               workspace=_workspace(), auth="token" if token else "none")
 
     if args.transport == "http":
+        if token:
+            # Enforce Bearer token auth on HTTP transport.
+            # FastMCP's StaticTokenVerifier gates all requests.
+            from fastmcp.server.auth import OAuthProvider, StaticTokenVerifier
+            verifier = StaticTokenVerifier(
+                tokens={token: {"sub": "mem-os-client", "scope": "full"}},
+            )
+            auth_provider = OAuthProvider(token_verifier=verifier)
+            mcp._auth = auth_provider
+            _log.info("mcp_auth_enforced", mode="static_token")
         mcp.run(transport="sse", port=args.port)
     else:
         mcp.run()

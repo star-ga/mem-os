@@ -358,5 +358,47 @@ class TestMCPServerMeta(unittest.TestCase):
         self.assertIn("contradiction", self.mod.mcp.instructions.lower())
 
 
+class TestTokenVerification(unittest.TestCase):
+    """Security tests for MCP HTTP token enforcement."""
+
+    def setUp(self):
+        self.td = tempfile.mkdtemp()
+        os.makedirs(os.path.join(self.td, "decisions"))
+        self.mod = _load_server(self.td)
+        self._orig_token = os.environ.get("MEM_OS_TOKEN")
+
+    def tearDown(self):
+        shutil.rmtree(self.td, ignore_errors=True)
+        if self._orig_token is not None:
+            os.environ["MEM_OS_TOKEN"] = self._orig_token
+        else:
+            os.environ.pop("MEM_OS_TOKEN", None)
+
+    def test_no_token_configured_allows_all(self):
+        os.environ.pop("MEM_OS_TOKEN", None)
+        self.assertTrue(self.mod.verify_token({}))
+        self.assertTrue(self.mod.verify_token({"Authorization": "Bearer anything"}))
+
+    def test_valid_bearer_token(self):
+        os.environ["MEM_OS_TOKEN"] = "secret123"
+        self.assertTrue(self.mod.verify_token({"Authorization": "Bearer secret123"}))
+
+    def test_invalid_bearer_token(self):
+        os.environ["MEM_OS_TOKEN"] = "secret123"
+        self.assertFalse(self.mod.verify_token({"Authorization": "Bearer wrong"}))
+
+    def test_missing_token_rejected(self):
+        os.environ["MEM_OS_TOKEN"] = "secret123"
+        self.assertFalse(self.mod.verify_token({}))
+
+    def test_alt_header_accepted(self):
+        os.environ["MEM_OS_TOKEN"] = "secret123"
+        self.assertTrue(self.mod.verify_token({"X-MemOS-Token": "secret123"}))
+
+    def test_alt_header_wrong_rejected(self):
+        os.environ["MEM_OS_TOKEN"] = "secret123"
+        self.assertFalse(self.mod.verify_token({"X-MemOS-Token": "wrong"}))
+
+
 if __name__ == "__main__":
     unittest.main()
