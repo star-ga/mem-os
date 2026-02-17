@@ -1258,22 +1258,30 @@ def recall(workspace: str, query: str, limit: int = 10, active_only: bool = Fals
 
 
 def _load_backend(workspace: str) -> str:
-    """Load recall backend from config. Falls back to BM25."""
+    """Load recall backend from config. Falls back to BM25 scan.
+
+    Supported backends:
+        "scan" / "tfidf" — in-memory BM25 scan (default, O(corpus))
+        "sqlite"          — SQLite FTS5 index (O(log N))
+        "vector"          — vector embedding backend (requires recall_vector)
+    """
     config_path = os.path.join(workspace, "mem-os.json")
     if os.path.isfile(config_path):
         try:
             with open(config_path) as f:
                 cfg = json.load(f)
-            backend = cfg.get("recall", {}).get("backend", "tfidf")
+            backend = cfg.get("recall", {}).get("backend", "scan")
+            if backend == "sqlite":
+                return "sqlite"
             if backend == "vector":
                 try:
                     from recall_vector import VectorBackend
                     return VectorBackend(cfg.get("recall", {}))
                 except ImportError:
-                    pass  # fall through to BM25
+                    pass  # fall through to scan
         except (OSError, json.JSONDecodeError, KeyError):
             pass
-    return None  # use built-in BM25
+    return None  # use built-in BM25 scan
 
 
 def main():
@@ -1290,19 +1298,40 @@ def main():
                         help="Disable v7 deterministic reranking (use pure BM25)")
     parser.add_argument("--rerank-debug", action="store_true",
                         help="Show reranker feature breakdowns in JSON output")
+    parser.add_argument("--backend", choices=["scan", "sqlite", "auto"],
+                        default="auto",
+                        help="Recall backend: scan (O(corpus)), sqlite (O(log N)), auto (config)")
     args = parser.parse_args()
 
-    # Try vector backend first, fall back to BM25
-    backend = _load_backend(args.workspace)
-    if backend:
-        try:
-            results = backend.search(args.workspace, args.query, args.limit, args.active_only)
-        except (OSError, ValueError, TypeError) as e:
-            print(f"recall: backend error ({e}), falling back to BM25", file=sys.stderr)
-            results = recall(args.workspace, args.query, args.limit, args.active_only,
-                             args.graph, retrieve_wide_k=args.retrieve_wide_k,
-                             rerank=not args.no_rerank, rerank_debug=args.rerank_debug)
-    else:
+    # Resolve backend: CLI flag > config > default scan
+    backend = args.backend
+    if backend == "auto":
+        cfg_backend = _load_backend(args.workspace)
+        if cfg_backend == "sqlite":
+            backend = "sqlite"
+        elif cfg_backend is not None:
+            # Vector or other custom backend
+            try:
+                results = cfg_backend.search(
+                    args.workspace, args.query, args.limit, args.active_only
+                )
+            except (OSError, ValueError, TypeError) as e:
+                print(f"recall: backend error ({e}), falling back to scan", file=sys.stderr)
+                backend = "scan"
+            else:
+                backend = None  # already have results
+        else:
+            backend = "scan"
+
+    if backend == "sqlite":
+        from sqlite_index import query_index
+        results = query_index(
+            args.workspace, args.query, limit=args.limit,
+            active_only=args.active_only, graph_boost=args.graph,
+            retrieve_wide_k=args.retrieve_wide_k,
+            rerank=not args.no_rerank, rerank_debug=args.rerank_debug,
+        )
+    elif backend == "scan":
         results = recall(args.workspace, args.query, args.limit, args.active_only,
                          args.graph, retrieve_wide_k=args.retrieve_wide_k,
                          rerank=not args.no_rerank, rerank_debug=args.rerank_debug)

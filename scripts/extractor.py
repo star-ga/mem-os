@@ -432,6 +432,10 @@ def format_as_blocks(
         sem = _SEM_LABELS.get(card_type, "")
         prefix = f"({sem}) " if sem else ""
 
+        # Idempotency guard: don't double-prepend if content already has a label
+        if prefix and content.startswith("(") and ") " in content[:60]:
+            prefix = ""
+
         lines.append(f"[{block_id}]")
         lines.append(f"Statement: {prefix}{content}")
         if date:

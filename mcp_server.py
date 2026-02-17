@@ -67,6 +67,7 @@ from fastmcp import FastMCP
 
 from block_parser import parse_file, get_active, get_by_id
 from recall import recall as recall_engine
+from sqlite_index import query_index as fts_query, _db_path as fts_db_path
 from observability import get_logger, metrics
 
 _log = get_logger("mcp_server")
@@ -192,9 +193,12 @@ def get_health() -> str:
 
 @mcp.resource("mem-os://recall/{query}")
 def get_recall(query: str) -> str:
-    """Search memory using BM25 recall. Returns ranked results."""
+    """Search memory using ranked recall (FTS5 or BM25 scan)."""
     ws = _workspace()
-    results = recall_engine(ws, query, limit=10)
+    if os.path.isfile(fts_db_path(ws)):
+        results = fts_query(ws, query, limit=10)
+    else:
+        results = recall_engine(ws, query, limit=10)
     return json.dumps(results, indent=2, default=str)
 
 
@@ -210,7 +214,9 @@ def get_ledger() -> str:
 
 @mcp.tool
 def recall(query: str, limit: int = 10, active_only: bool = False) -> str:
-    """Search across all memory files with BM25 ranking.
+    """Search across all memory files with ranked retrieval.
+
+    Uses FTS5 index when available (O(log N)), falls back to BM25 scan.
 
     Args:
         query: Search query (supports stemming and domain-aware expansion).
@@ -221,9 +227,15 @@ def recall(query: str, limit: int = 10, active_only: bool = False) -> str:
         JSON array of ranked results with scores, IDs, and matched content.
     """
     ws = _workspace()
-    results = recall_engine(ws, query, limit=limit, active_only=active_only)
+    # Use FTS5 index when it exists, otherwise fall back to scan
+    if os.path.isfile(fts_db_path(ws)):
+        results = fts_query(ws, query, limit=limit, active_only=active_only)
+        backend = "sqlite"
+    else:
+        results = recall_engine(ws, query, limit=limit, active_only=active_only)
+        backend = "scan"
     metrics.inc("mcp_recall_queries")
-    _log.info("mcp_recall", query=query, results=len(results))
+    _log.info("mcp_recall", query=query, backend=backend, results=len(results))
     return json.dumps(results, indent=2, default=str)
 
 
