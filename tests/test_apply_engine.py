@@ -2,7 +2,6 @@
 """Tests for apply_engine.py — focus on security, validation, and rollback."""
 
 import os
-import shutil
 import sys
 import tempfile
 import unittest

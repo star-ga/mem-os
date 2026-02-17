@@ -2,15 +2,15 @@
 
 All notable changes to Mem-OS are documented in this file.
 
-## v10_full10_validated (2026-02-17)
+## 1.0.1 (2026-02-17)
 
-**Full 10-conv LoCoMo validated: 67.3% Acc>=50 (+9.1pp over v3)**
+**Full 10-conv LoCoMo validated: 67.3% Acc>=50 (+9.1pp over 1.0.0)**
 
 This release represents a generational improvement in Mem-OS retrieval quality, moving from keyword search to a deterministic reasoning pipeline.
 
 ### Benchmark Results
 
-| Metric | v3 | v10 | Delta |
+| Metric | 1.0.0 | 1.0.1 | Delta |
 |---|---|---|---|
 | Acc>=50 | 58.2% | **67.3%** | +9.1pp |
 | Mean Score | 54.3 | **61.4** | +7.1 |
@@ -20,21 +20,21 @@ Per-category Acc>=50: Open-domain +10.8pp, Single-hop +12.8pp, Temporal +7.3pp, 
 
 ### Changes
 
-#### Retrieval Pipeline (Phase D)
+#### Retrieval Pipeline
 - Wide retrieval: increased candidate pool to top-200 before rerank
 - Deterministic rerank with speaker-match, time-proximity, entity-overlap, bigram-coherence, and recency-decay signals
 - Speaker-aware extraction and boosting
 
-#### Recall Hardening (Phase E)
-- Month name normalization (January→1, etc.)
-- Irregular verb lemmatization (went→go, said→say, etc.)
+#### Recall Hardening
+- Month name normalization (January->1, etc.)
+- Irregular verb lemmatization (went->go, said->say, etc.)
 - Controlled synonym expansion with domain-aware terms
 - Context packing (append-only post-retrieval):
   - Rule 1: Dialog adjacency (question-answer pair recovery)
   - Rule 2: Multi-entity diversity enforcement
   - Rule 3: Pronoun rescue (antecedent recovery)
 
-#### Adversarial Gating (Phase E.1)
+#### Adversarial Gating
 - Verification-intent regex for broader adversarial detection
 - `morph_only` expansion mode for adversarial queries (lemma + months, no semantic synonyms)
 - Gated synonym expansion based on query type classification
@@ -44,22 +44,19 @@ Per-category Acc>=50: Open-domain +10.8pp, Single-hop +12.8pp, Temporal +7.3pp, 
 - Safe tar restore with path traversal protection
 - Enforced MCP token authentication for HTTP transport
 - Minimal snapshot apply (O(touched), copy2)
-
-### Tags
-
-| Tag | Description |
-|---|---|
-| `v8_phaseD_wide_speaker_extractor` | Wide retrieval + speaker-aware rerank |
-| `v9_phaseE_recall_hardening` | Month norm, irregular verbs, synonyms, context pack |
-| `v9_1_adv_gate_expansion` | Adversarial synonym gating |
-| `v10_full10_validated` | Full 10-conv validated (this release) |
+- CI: install pytest in workflow, fix 92 ruff lint warnings
 
 ---
 
-## v3 (baseline)
+## 1.0.0
 
-Initial LoCoMo benchmark baseline.
+Initial release.
 
 - BM25F retrieval with Porter stemming
 - Basic query expansion
-- 58.2% Acc>=50 on full 10-conv (1986 questions)
+- 58.2% Acc>=50 on full 10-conv LoCoMo (1986 questions)
+- Governance engine: contradiction detection, drift analysis, proposal queue
+- Multi-agent namespaces with ACL
+- MCP server with token auth
+- WAL + backup/restore
+- 478 unit tests

@@ -1,6 +1,6 @@
 [project]
 name = "mem-os"
-version = "1.0.0"
+version = "1.0.1"
 description = "Memory + Immune System for AI agents — local-first, auditable, governance-aware"
 readme = "README.md"
 license = "MIT"

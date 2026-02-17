@@ -10,7 +10,7 @@ import tempfile
 import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
-from block_parser import parse_blocks, get_active, get_by_id, extract_refs
+from block_parser import parse_blocks
 from recall import tokenize, extract_text, recall
 
 

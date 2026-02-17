@@ -22,7 +22,7 @@ from datetime import datetime, timedelta
 
 # Import block parser from same directory
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from block_parser import parse_file, get_active, extract_refs
+from block_parser import parse_file
 from filelock import FileLock
 
 
@@ -1172,7 +1172,7 @@ def main():
     ws = args.workspace
     report = IntelReport()
 
-    report.lines.append(f"Mem OS Intelligence Scan Report v2.0")
+    report.lines.append("Mem OS Intelligence Scan Report v2.0")
     report.lines.append(f"Date: {datetime.now().isoformat()}Z")
     report.lines.append(f"Workspace: {ws}")
 
@@ -1185,13 +1185,13 @@ def main():
     data = load_all(ws)
 
     if args.snapshot_only:
-        snapshot = generate_snapshot(data, ws, report)
+        generate_snapshot(data, ws, report)
     else:
         # Full scan
         contradictions = detect_contradictions(data["decisions"], report)
         drift_signals = detect_drift(data, report)
         impacts = build_impact_graph(data, report)
-        snapshot = generate_snapshot(data, ws, report)
+        generate_snapshot(data, ws, report)
 
         # Write findings
         write_contradictions(contradictions, ws, report)
@@ -1200,18 +1200,18 @@ def main():
 
         # Mode-aware proposal generation
         if mode in ("propose", "enforce") and (contradictions or drift_signals):
-            proposals_written = generate_proposals(
+            generate_proposals(
                 contradictions, drift_signals, ws, intel_state, report
             )
         else:
             if mode == "detect_only" and (contradictions or drift_signals):
                 report.info_msg(
-                    f"Mode is detect_only — skipping proposal generation. "
-                    f"Switch to 'propose' to generate fix proposals."
+                    "Mode is detect_only — skipping proposal generation. "
+                    "Switch to 'propose' to generate fix proposals."
                 )
 
         # Generate briefing
-        briefing = generate_briefing(data, contradictions, drift_signals, impacts, ws, report)
+        generate_briefing(data, contradictions, drift_signals, impacts, ws, report)
 
         # Update intel-state
         now = datetime.now().isoformat() + "Z"

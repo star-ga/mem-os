@@ -99,7 +99,7 @@ class TestTimed(unittest.TestCase):
     def test_timed_with_logger(self):
         log = get_logger("test")
         with timed("fast_op", logger=log):
-            x = 1 + 1  # trivial
+            pass  # trivial
 
 
 if __name__ == "__main__":

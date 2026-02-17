@@ -1,7 +1,6 @@
-# Mem-OS v10 Benchmark Report
+# Mem-OS v1.0.1 Benchmark Report
 
-**Tag:** `v10_full10_validated`
-**Commit:** `111bfe7890ac124965f7d219bc0a579396d5ce3e`
+**Tag:** `v1.0.1`
 **Date:** 2026-02-17
 
 ## Environment
@@ -21,7 +20,7 @@
 ## Reproduction
 
 ```bash
-git checkout v10_full10_validated
+git checkout v1.0.1
 pip install -e .
 python benchmarks/locomo_judge.py \
   --answerer gpt-4o-mini \
@@ -34,7 +33,7 @@ Requires `OPENAI_API_KEY` in environment.
 
 ## Overall Results
 
-| Metric | v3 (baseline) | v10 | Delta |
+| Metric | v3 (baseline) | v1.0.1 | Delta |
 |---|---|---|---|
 | **Acc>=50** | 58.2% | **67.3%** | **+9.1pp** |
 | Mean Score | 54.3 | **61.4** | +7.1 |
@@ -42,7 +41,7 @@ Requires `OPENAI_API_KEY` in environment.
 
 ## Per-Category (Acc>=50)
 
-| Category | N | v3 | v10 | Delta |
+| Category | N | v3 | v1.0.1 | Delta |
 |---|---|---|---|---|
 | open-domain | 841 | 75.7% | **86.6%** | +10.8pp |
 | temporal | 96 | 70.8% | **78.1%** | +7.3pp |
@@ -52,7 +51,7 @@ Requires `OPENAI_API_KEY` in environment.
 
 ## Per-Category (Mean Score)
 
-| Category | N | v3 | v10 | Delta |
+| Category | N | v3 | v1.0.1 | Delta |
 |---|---|---|---|---|
 | open-domain | 841 | 68.3 | **78.3** | +10.1 |
 | temporal | 96 | 61.5 | **65.7** | +4.3 |
@@ -114,4 +113,4 @@ Pure deterministic retrieval pipeline — no vector DB, no embeddings.
 | `v8_phaseD_wide_speaker_extractor` | — | Wide retrieval + speaker-aware rerank |
 | `v9_phaseE_recall_hardening` | `527636c` | Month norm, irregular verbs, synonyms, context pack |
 | `v9_1_adv_gate_expansion` | `111bfe7` | Adversarial synonym gating |
-| `v10_full10_validated` | `111bfe7` | Full 10-conv validated (this report) |
+| `v1.0.1` | — | Full 10-conv validated release (this report) |

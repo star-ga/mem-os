@@ -30,11 +30,10 @@ import sys
 from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from block_parser import parse_file, get_active
-from observability import get_logger, metrics, timed
+from block_parser import parse_file
+from observability import get_logger, metrics
 from recall import (
-    CORPUS_FILES, SEARCH_FIELDS, FIELD_WEIGHTS,
-    get_excerpt, get_block_type, date_score, detect_query_type,
+    CORPUS_FILES, SEARCH_FIELDS, get_excerpt, get_block_type, date_score, detect_query_type,
     _QUERY_TYPE_PARAMS, tokenize, expand_query, expand_months,
     _parse_speaker_from_tags, rerank_hits, _BLOCK_ID_RE,
 )
@@ -703,7 +702,7 @@ def main():
     if args.command == "build":
         ws = os.path.abspath(args.workspace)
         result = build_index(ws, incremental=not args.full)
-        print(f"Index build complete:")
+        print("Index build complete:")
         print(f"  Files checked: {result['files_checked']}")
         print(f"  Files indexed: {result['files_indexed']}")
         print(f"  Blocks indexed: {result['blocks_indexed']}")
@@ -734,7 +733,7 @@ def main():
         if not status["exists"]:
             print("No index found. Run 'build' to create one.")
         else:
-            print(f"Index status:")
+            print("Index status:")
             print(f"  Blocks: {status['blocks']}")
             print(f"  Last build: {status['last_build']}")
             print(f"  Stale files: {status['stale_files']}")

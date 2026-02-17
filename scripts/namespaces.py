@@ -266,7 +266,7 @@ class SharedLedger:
                 f.write(f"Text: {fact.get('text', '')}\n")
                 if fact.get("source_block"):
                     f.write(f"SourceBlock: {fact['source_block']}\n")
-                f.write(f"Status: pending-review\n")
+                f.write("Status: pending-review\n")
                 f.write("\n---\n")
 
         _log.info("fact_appended", agent=source_agent, confidence=fact.get("confidence"))

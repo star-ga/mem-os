@@ -121,12 +121,12 @@ def _pack_adversarial(hits: list[dict], max_chars: int = 6000) -> str:
     parts.append(f"EVIDENCE_FOUND: {'YES' if has_evidence else 'NO'}")
     parts.append("EVIDENCE:")
     if evidence_lines:
-        parts.extend(f"- {l}" for l in evidence_lines)
+        parts.extend(f"- {ln}" for ln in evidence_lines)
     else:
         parts.append("- (none)")
     parts.append("DENIAL_EVIDENCE:")
     if denial_lines:
-        parts.extend(f"- {l}" for l in denial_lines)
+        parts.extend(f"- {ln}" for ln in denial_lines)
     else:
         parts.append("- (none)")
 

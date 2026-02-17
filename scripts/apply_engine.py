@@ -25,7 +25,7 @@ from datetime import datetime, timedelta
 
 # Import block parser from same directory
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from block_parser import parse_file, parse_blocks, get_by_id
+from block_parser import parse_file, get_by_id
 from filelock import FileLock
 from backup_restore import WAL
 from namespaces import NamespaceManager
@@ -417,13 +417,13 @@ def update_receipt(receipt_path, post_checks, delta, status, diff_text=None):
         fh.write("Delta:\n")
         for k, v in delta.items():
             fh.write(f"- {k}: {v}\n")
-        
+
         if diff_text:
             fh.write("DIFF:\n")
             # Indent diff lines for block inclusion
             for line in diff_text.split("\n"):
                 fh.write(f"  {line}\n")
-        
+
         fh.write(f"Result: {status}\n")
 
 
@@ -520,7 +520,7 @@ def _op_insert_after_block(filepath, op):
         insert_at = len(lines)
 
     # Insert patch
-    patch_lines = [l + "\n" for l in patch.split("\n")]
+    patch_lines = [line + "\n" for line in patch.split("\n")]
     lines[insert_at:insert_at] = ["\n"] + patch_lines
 
     with open(filepath, "w") as f:
@@ -676,7 +676,7 @@ def _op_replace_range(filepath, op):
         return False, f"replace_range: markers not found in {target}"
 
     # Replace lines between markers (exclusive of end marker line)
-    patch_lines = [l + "\n" for l in patch.split("\n")]
+    patch_lines = [line + "\n" for line in patch.split("\n")]
     lines[start_line:end_line] = patch_lines
 
     with open(filepath, "w") as f:
@@ -904,7 +904,7 @@ def apply_proposal(ws, proposal_id, dry_run=False, agent_id=None):
         dry_run: Validate without executing.
         agent_id: Optional agent ID for namespace ACL enforcement.
     """
-    print(f"═══ Mem OS Apply Engine v1.0 ═══")
+    print("═══ Mem OS Apply Engine v1.0 ═══")
     print(f"Proposal: {proposal_id}")
     print(f"Workspace: {ws}")
     print(f"Dry run: {dry_run}")
@@ -963,7 +963,7 @@ def apply_proposal(ws, proposal_id, dry_run=False, agent_id=None):
     if not ok_cool:
         print(f"  FAIL: {cool_reason}")
         return False, cool_reason
-    print(f"  Cooldown: PASS")
+    print("  Cooldown: PASS")
 
     # No-touch window (warning on dry-run, hard fail on real apply)
     ok_touch, touch_reason = check_no_touch_window(ws)
@@ -973,7 +973,7 @@ def apply_proposal(ws, proposal_id, dry_run=False, agent_id=None):
     elif not ok_touch:
         print(f"  WARN: {touch_reason} (dry-run, continuing)")
     else:
-        print(f"  No-touch window: PASS")
+        print("  No-touch window: PASS")
 
     if dry_run:
         # Dry run: show ops without mutation (skip preconditions to avoid side effects)
@@ -1172,7 +1172,7 @@ def rollback(ws, receipt_ts):
     if os.path.isfile(receipt_path):
         with open(receipt_path, "a") as f:
             f.write(f"\nRolledBack: {datetime.now().strftime('%Y-%m-%dT%H:%M:%SZ')}\n")
-            f.write(f"Result: rolled_back\n")
+            f.write("Result: rolled_back\n")
 
     print(f"\n═══ ROLLED BACK from {receipt_ts} ═══")
     return True

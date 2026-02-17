@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Tests for sqlite_index.py — SQLite FTS5 index for mem-os recall."""
 
-import json
 import os
 import shutil
 import sys
@@ -11,7 +10,7 @@ import unittest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
 from sqlite_index import (
     build_index, query_index, index_status,
-    _connect, _init_schema, _db_path, _file_hash,
+    _connect, _db_path, _file_hash,
 )
 
 
@@ -77,7 +76,7 @@ class TestBuildIndex(_WorkspaceMixin, unittest.TestCase):
             "Status: active\n"
         ))
         # First build
-        r1 = build_index(ws, incremental=False)
+        build_index(ws, incremental=False)
         # Second build (no changes)
         r2 = build_index(ws, incremental=True)
         self.assertEqual(r2["files_indexed"], 0)

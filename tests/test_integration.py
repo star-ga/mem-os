@@ -1,6 +1,5 @@
 """Integration test: full mem-os lifecycle init → capture → scan → recall."""
 
-import json
 import os
 import shutil
 import sys
@@ -11,7 +10,6 @@ from datetime import datetime
 # Ensure scripts are importable
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
 
-from block_parser import parse_file
 from init_workspace import init
 from capture import scan_log, append_signals
 from recall import recall

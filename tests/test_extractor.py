@@ -3,7 +3,6 @@
 
 import os
 import sys
-import pytest
 
 # Add scripts/ to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
@@ -131,8 +130,8 @@ class TestFormatAsBlocks:
         text = format_as_blocks(cards)
         assert "[FACT-001]" in text
         # Find the Statement line containing our content (not just first one)
-        stmt_lines = [l for l in text.splitlines()
-                      if l.startswith("Statement:") and "Caroline is a counselor" in l]
+        stmt_lines = [ln for ln in text.splitlines()
+                      if ln.startswith("Statement:") and "Caroline is a counselor" in ln]
         assert len(stmt_lines) == 1, f"Expected 1 match, got {len(stmt_lines)}"
         stmt = stmt_lines[0]
         # Semantic prefix: starts with "(" and content follows after ") "
@@ -176,7 +175,7 @@ class TestFormatAsBlocks:
                       "speaker": "", "date": "", "source_id": "",
                       "confidence": 0.8}]
             text = format_as_blocks(cards)
-            stmt = [l for l in text.splitlines() if l.startswith("Statement:")][0]
+            stmt = [ln for ln in text.splitlines() if ln.startswith("Statement:")][0]
             assert stmt.startswith("Statement: ("), f"{card_type} missing prefix"
             assert "X" in stmt
 
@@ -188,8 +187,8 @@ class TestFormatAsBlocks:
                   "confidence": 0.8}]
         text = format_as_blocks(cards)
         # Select by content match, not index
-        stmt_lines = [l for l in text.splitlines()
-                      if l.startswith("Statement:") and "Already prefixed" in l]
+        stmt_lines = [ln for ln in text.splitlines()
+                      if ln.startswith("Statement:") and "Already prefixed" in ln]
         assert len(stmt_lines) == 1
         after_key = stmt_lines[0].split("Statement: ", 1)[1]
         # Structural check: exactly one leading prefix, not label-specific
@@ -207,16 +206,16 @@ class TestFormatAsBlocks:
                   "source_id": "DIA-D2-5", "confidence": 0.9}]
         text1 = format_as_blocks(cards)
         # Select by content match
-        stmt1 = [l for l in text1.splitlines()
-                 if l.startswith("Statement:") and "visited the park" in l][0]
+        stmt1 = [ln for ln in text1.splitlines()
+                 if ln.startswith("Statement:") and "visited the park" in ln][0]
         content_with_prefix = stmt1.split("Statement: ", 1)[1]
         # Feed it back through as content
         cards2 = [{"type": "EVENT", "content": content_with_prefix,
                    "speaker": "John", "date": "2023-06-01",
                    "source_id": "DIA-D2-5", "confidence": 0.9}]
         text2 = format_as_blocks(cards2)
-        stmt2 = [l for l in text2.splitlines()
-                 if l.startswith("Statement:") and "visited the park" in l][0]
+        stmt2 = [ln for ln in text2.splitlines()
+                 if ln.startswith("Statement:") and "visited the park" in ln][0]
         assert stmt1 == stmt2, f"Not idempotent:\n  pass1: {stmt1}\n  pass2: {stmt2}"
 
 

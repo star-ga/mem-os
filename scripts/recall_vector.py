@@ -53,7 +53,7 @@ from recall import (
     get_block_type,
     date_score,
 )
-from block_parser import parse_file, get_active
+from block_parser import parse_file
 from observability import get_logger, metrics, timed
 
 _log = get_logger("recall_vector")

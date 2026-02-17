@@ -251,7 +251,7 @@ def generate_resolution_proposals(workspace: str, resolutions: list[dict] | None
                 proposal_id = f"R-{date_compact}-{i:03d}"
                 f.write(f"\n[{proposal_id}]\n")
                 f.write(f"Date: {ts}\n")
-                f.write(f"Type: auto-resolution\n")
+                f.write("Type: auto-resolution\n")
                 f.write(f"Strategy: {res['strategy']}\n")
                 f.write(f"Confidence: {res['confidence']}\n")
                 f.write(f"Contradiction: {res['contradiction_id']}\n")
@@ -259,7 +259,7 @@ def generate_resolution_proposals(workspace: str, resolutions: list[dict] | None
                 f.write(f"Loser: {res['loser_id']} (hash: {res['hash_b']})\n")
                 f.write(f"Action: Supersede {res['loser_id']} with SupersededBy: {res['winner_id']}\n")
                 f.write(f"Rationale: {res['rationale']}\n")
-                f.write(f"Status: pending-review\n")
+                f.write("Status: pending-review\n")
                 f.write("\n---\n")
 
     _log.info("resolution_proposals_generated", count=len(auto))

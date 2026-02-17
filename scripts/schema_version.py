@@ -20,7 +20,7 @@ import sys
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, SCRIPT_DIR)
 
-from observability import get_logger
+from observability import get_logger  # noqa: E402
 
 _log = get_logger("schema_version")
 
@@ -60,7 +60,7 @@ def check_migration_needed(workspace: str) -> list[str]:
 
     steps = []
     for from_v, to_v, desc, _fn in _MIGRATIONS:
-        from_t = _version_tuple(from_v)
+        _version_tuple(from_v)
         to_t = _version_tuple(to_v)
         if current_t < to_t:
             steps.append(f"{from_v} -> {to_v}: {desc}")

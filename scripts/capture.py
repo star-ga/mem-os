@@ -20,16 +20,14 @@ Usage:
 
 from __future__ import annotations
 
-import json
 import os
 import re
 import sys
 from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from block_parser import parse_file
 from filelock import FileLock
-from observability import get_logger, metrics, timed
+from observability import get_logger, metrics
 
 _log = get_logger("capture")
 
@@ -248,7 +246,7 @@ def append_signals(workspace: str, signals: list[dict], date_str: str) -> int:
                 f.write(f"Source: memory/{date_str}.md:{sig['line']}\n")
                 f.write(f"Confidence: {sig.get('confidence', 'medium')}\n")
                 f.write(f"Priority: {sig.get('priority', 'P2')}\n")
-                f.write(f"Status: pending\n")
+                f.write("Status: pending\n")
                 f.write(f"Excerpt: {sig['text']}\n")
 
                 # Write structured extraction

@@ -5,10 +5,9 @@ import os
 import sys
 import tempfile
 import unittest
-from datetime import datetime
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
-from capture import scan_log, append_signals, DECISION_PATTERNS, XREF_PATTERN
+from capture import scan_log, append_signals
 
 
 class TestScanLog(unittest.TestCase):

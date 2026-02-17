@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Tests for conflict_resolver.py — zero external deps (stdlib unittest)."""
 
-import json
 import os
 import sys
 import tempfile

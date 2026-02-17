@@ -3,13 +3,11 @@
 
 import os
 import sys
-import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
 
 from recall import (
-    context_pack, _block_to_result, get_excerpt,
-    _parse_speaker_from_tags, get_block_type,
+    context_pack,
 )
 
 

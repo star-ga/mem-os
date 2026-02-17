@@ -28,7 +28,7 @@ from collections import Counter
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from block_parser import parse_file, get_active
-from observability import get_logger, metrics, timed
+from observability import get_logger, metrics
 
 _log = get_logger("recall")
 
@@ -1117,7 +1117,7 @@ def rerank_hits(
 
     # Anchor rule: ensure BM25 top-1 is in final set
     if bm25_top1_id:
-        top_ids = {h["_id"] for h in hits[:max(10, len(hits))]}
+        {h["_id"] for h in hits[:max(10, len(hits))]}
         if bm25_top1_id not in {h["_id"] for h in hits[:10]}:
             # Find it and swap into position
             for i, h in enumerate(hits):
@@ -1430,7 +1430,7 @@ def recall(workspace: str, query: str, limit: int = 10, active_only: bool = Fals
         graph_boost = True
 
     # Adjust effective limit for retrieval (retrieve more candidates, trim later)
-    effective_limit = int(limit * qparams.get("extra_limit_factor", 1.0))
+    int(limit * qparams.get("extra_limit_factor", 1.0))
 
     # Namespace ACL: resolve accessible paths if agent_id is provided
     ns_manager = None

@@ -81,7 +81,7 @@ Mem-OS recall engine evaluated on two standard long-term memory benchmarks. Zero
 
 Same pipeline as Mem0 and Letta evaluations: retrieve context, generate answer with LLM, score against gold reference with judge LLM. Directly comparable methodology.
 
-| Metric | v3 (baseline) | **v10** | Delta |
+| Metric | v3 (baseline) | **v1.0.1** | Delta |
 |---|--:|--:|---|
 | **Acc ≥50** | 58.2% | **67.3%** | **+9.1pp** |
 | Mean Score | 54.3 | **61.4** | +7.1 |
@@ -98,7 +98,7 @@ Category breakdown (gpt-4o-mini answerer + judge, all 10 conversations, N=1986):
 | Multi-hop | 321 | 55.5% | 48.4 |
 | Adversarial | 446 | 36.3% | 39.5 |
 
-> **Tag:** `v10_full10_validated` | **Judge:** `gpt-4o-mini` (answerer + judge) | **N:** 1986 questions, 10 conversations | See [`benchmarks/REPORT_v10.md`](benchmarks/REPORT_v10.md) for full methodology and reproduction steps.
+> **Version:** `1.0.1` | **Judge:** `gpt-4o-mini` (answerer + judge) | **N:** 1986 questions, 10 conversations | See [`benchmarks/REPORT_v1.0.1.md`](benchmarks/REPORT_v1.0.1.md) for full methodology and reproduction steps.
 
 **Competitive landscape:**
 
@@ -486,7 +486,7 @@ Letta's August 2025 analysis showed that a plain-file baseline (full conversatio
 - **Overhead hurts.** Specialized pipelines introduce failure modes (bad embeddings, chunking errors, stale indexes) that simple file access avoids.
 - **For text-heavy agentic use cases, "how well the agent manages context" > "how smart the retrieval index is."**
 
-Mem-OS's deterministic retrieval pipeline validates these findings: **67.3% on LoCoMo** (v10) with zero dependencies, no embeddings, and no vector database — within 1.2pp of Mem0's graph-based approach. The key insight: treating retrieval as a reasoning pipeline (wide candidate pool → deterministic rerank → context packing) closes most of the gap without any ML infrastructure. Unlike plain-file baselines, Mem-OS adds integrity checking, governance, and agent-agnostic shared memory via MCP that no other system provides.
+Mem-OS's deterministic retrieval pipeline validates these findings: **67.3% on LoCoMo** (v1.0.1) with zero dependencies, no embeddings, and no vector database — within 1.2pp of Mem0's graph-based approach. The key insight: treating retrieval as a reasoning pipeline (wide candidate pool → deterministic rerank → context packing) closes most of the gap without any ML infrastructure. Unlike plain-file baselines, Mem-OS adds integrity checking, governance, and agent-agnostic shared memory via MCP that no other system provides.
 
 ---
 

@@ -19,27 +19,20 @@ import threading
 import time
 import unittest
 from datetime import datetime
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 # Ensure scripts are importable
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
 
-from block_parser import parse_file, parse_blocks, get_by_id
+from block_parser import parse_file
 from init_workspace import init
 from recall import recall
 from apply_engine import (
     apply_proposal,
     create_snapshot,
     restore_snapshot,
-    execute_op,
-    validate_proposal,
-    find_proposal,
-    write_receipt,
-    update_receipt,
     compute_fingerprint,
     _list_workspace_files,
-    _cleanup_orphan_files,
-    SNAPSHOT_DIRS,
     SNAPSHOT_FILES,
 )
 from backup_restore import WAL
@@ -372,7 +365,7 @@ class TestPartialFailureRollback(unittest.TestCase):
 
         # First create decisions file, record pre-apply files
         dec_path = os.path.join(self.ws, "decisions", "DECISIONS.md")
-        pre_files = _list_workspace_files(self.ws)
+        _list_workspace_files(self.ws)
 
         # Op 1: append a block (creates new content -- succeeds)
         # Op 2: fail on non-existent target
@@ -435,7 +428,7 @@ class TestWALCrashRecovery(unittest.TestCase):
 
         # Begin WAL entry
         wal = WAL(self.ws)
-        entry_id = wal.begin("update", target_path, "new content that simulates crash")
+        wal.begin("update", target_path, "new content that simulates crash")
 
         # Simulate the write happening (as if the process was in the middle of writing)
         with open(target_path, "w") as f:
@@ -497,7 +490,7 @@ class TestWALCrashRecovery(unittest.TestCase):
         self.assertFalse(os.path.exists(target_path))
 
         wal = WAL(self.ws)
-        entry_id = wal.begin("create", target_path, "brand new file content")
+        wal.begin("create", target_path, "brand new file content")
 
         # Simulate the file being created
         with open(target_path, "w") as f:
@@ -1002,7 +995,7 @@ class TestPostCheckFailureRollback(unittest.TestCase):
         """After post-check failure rollback, orphan files from ops are removed."""
 
         # Record pre-apply file set
-        pre_files = _list_workspace_files(self.ws)
+        _list_workspace_files(self.ws)
 
         # Create a proposal that appends a block (creating new content),
         # and then the post-check fails

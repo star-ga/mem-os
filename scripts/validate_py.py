@@ -8,7 +8,6 @@ Usage: python3 scripts/validate_py.py [workspace_path]
 import os
 import re
 import sys
-import json
 from datetime import datetime, timezone
 
 # Allow importing block_parser from same directory
@@ -66,7 +65,7 @@ class Validator:
             return 1
 
         now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-        self.log(f"Mem OS Integrity Validation Report (Python)")
+        self.log("Mem OS Integrity Validation Report (Python)")
         self.log(f"Date: {now}")
         self.log(f"Workspace: {self.ws}")
 

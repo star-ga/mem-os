@@ -12,7 +12,6 @@ from namespaces import (
     NamespaceManager,
     SharedLedger,
     init_multi_agent_workspace,
-    DEFAULT_ACL,
     NAMESPACE_DIRS,
 )
 
@@ -90,7 +89,7 @@ class TestNamespaceManager(unittest.TestCase):
 
     def test_init_agent_creates_agent_dirs(self):
         ns = NamespaceManager(self.td)
-        created = ns.init_agent("coder-1")
+        ns.init_agent("coder-1")
         self.assertTrue(os.path.isdir(os.path.join(self.td, "agents", "coder-1", "decisions")))
         self.assertTrue(os.path.isdir(os.path.join(self.td, "agents", "coder-1", "memory")))
 
@@ -215,7 +214,7 @@ class TestInitMultiAgentWorkspace(unittest.TestCase):
         shutil.rmtree(self.td, ignore_errors=True)
 
     def test_creates_shared_and_agents(self):
-        result = init_multi_agent_workspace(self.td, agents=["coder-1", "reviewer-1"])
+        init_multi_agent_workspace(self.td, agents=["coder-1", "reviewer-1"])
         self.assertTrue(os.path.isdir(os.path.join(self.td, "shared", "decisions")))
         self.assertTrue(os.path.isdir(os.path.join(self.td, "agents", "coder-1", "decisions")))
         self.assertTrue(os.path.isdir(os.path.join(self.td, "agents", "reviewer-1", "decisions")))
@@ -244,7 +243,7 @@ class TestInitMultiAgentWorkspace(unittest.TestCase):
         self.assertTrue(acl.get("custom"))
 
     def test_no_agents_still_creates_shared(self):
-        result = init_multi_agent_workspace(self.td)
+        init_multi_agent_workspace(self.td)
         self.assertTrue(os.path.isdir(os.path.join(self.td, "shared", "decisions")))
 
 
