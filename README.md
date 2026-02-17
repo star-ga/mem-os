@@ -7,6 +7,7 @@
     Local-first &bull; Auditable &bull; Governance-aware
   </p>
   <p align="center">
+    <a href="https://github.com/star-ga/mem-os/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/star-ga/mem-os/ci.yml?branch=main&style=flat-square&label=CI" alt="CI"></a>
     <a href="https://github.com/star-ga/mem-os/blob/main/LICENSE"><img src="https://img.shields.io/github/license/star-ga/mem-os?style=flat-square&color=blue" alt="License"></a>
     <a href="https://github.com/star-ga/mem-os/releases"><img src="https://img.shields.io/github/v/release/star-ga/mem-os?style=flat-square&color=green" alt="Release"></a>
     <img src="https://img.shields.io/badge/python-3.10%2B-blue?style=flat-square&logo=python&logoColor=white" alt="Python 3.10+">
