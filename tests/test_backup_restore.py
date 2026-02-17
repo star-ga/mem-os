@@ -243,5 +243,85 @@ class TestRestoreWorkspace(unittest.TestCase):
         self.assertEqual(result["skipped"], 0)
 
 
+class TestRestoreSecurity(unittest.TestCase):
+    """Security regression tests for tar restore path traversal."""
+
+    def setUp(self):
+        self.td = tempfile.mkdtemp()
+        self.restore_td = tempfile.mkdtemp()
+
+    def tearDown(self):
+        shutil.rmtree(self.td, ignore_errors=True)
+        shutil.rmtree(self.restore_td, ignore_errors=True)
+
+    def _make_malicious_tar(self, members):
+        """Build a tar.gz with crafted member names."""
+        tar_path = os.path.join(self.td, "evil.tar.gz")
+        with tarfile.open(tar_path, "w:gz") as tar:
+            for name, content in members:
+                import io
+                data = content.encode()
+                info = tarfile.TarInfo(name=name)
+                info.size = len(data)
+                tar.addfile(info, io.BytesIO(data))
+        return tar_path
+
+    def test_blocks_dotdot_traversal(self):
+        tar_path = self._make_malicious_tar([
+            ("../escape.txt", "escaped!"),
+            ("good.txt", "safe content"),
+        ])
+        result = restore_workspace(self.restore_td, tar_path, force=True)
+        self.assertEqual(result["blocked"], 1)
+        self.assertEqual(result["restored"], 1)
+        # Escaped file must NOT exist outside workspace
+        escaped = os.path.join(self.restore_td, "..", "escape.txt")
+        self.assertFalse(os.path.isfile(os.path.abspath(escaped)))
+        # Good file should exist
+        self.assertTrue(os.path.isfile(os.path.join(self.restore_td, "good.txt")))
+
+    def test_blocks_absolute_path(self):
+        tar_path = self._make_malicious_tar([
+            ("/tmp/evil_abs.txt", "absolute path attack"),
+        ])
+        result = restore_workspace(self.restore_td, tar_path, force=True)
+        self.assertEqual(result["blocked"], 1)
+        self.assertEqual(result["restored"], 0)
+        self.assertFalse(os.path.isfile("/tmp/evil_abs.txt"))
+
+    def test_blocks_symlink_member(self):
+        """Tar with a symlink member should be rejected."""
+        tar_path = os.path.join(self.td, "symlink.tar.gz")
+        with tarfile.open(tar_path, "w:gz") as tar:
+            # Add a symlink pointing outside workspace
+            info = tarfile.TarInfo(name="link.txt")
+            info.type = tarfile.SYMTYPE
+            info.linkname = "/etc/passwd"
+            tar.addfile(info)
+        result = restore_workspace(self.restore_td, tar_path, force=True)
+        self.assertEqual(result["blocked"], 1)
+        self.assertFalse(os.path.exists(os.path.join(self.restore_td, "link.txt")))
+
+    def test_blocks_prefix_trick(self):
+        """Member whose resolved path escapes via prefix match."""
+        # If workspace is /tmp/ws, a member named "../ws_evil/x" resolves
+        # to /tmp/ws_evil/x which starts with /tmp/ws but is NOT inside it.
+        tar_path = self._make_malicious_tar([
+            ("../ws_evil/payload.txt", "prefix trick!"),
+        ])
+        result = restore_workspace(self.restore_td, tar_path, force=True)
+        self.assertEqual(result["blocked"], 1)
+
+    def test_normal_restore_still_works(self):
+        """Ensure security checks don't break legitimate restores."""
+        tar_path = self._make_malicious_tar([
+            ("decisions/DECISIONS.md", "[D-001]\nStatement: Test\n"),
+            ("mem-os.json", '{"version": "1.0"}'),
+        ])
+        result = restore_workspace(self.restore_td, tar_path, force=True)
+        self.assertEqual(result["blocked"], 0)
+        self.assertEqual(result["restored"], 2)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -260,6 +260,36 @@ def export_jsonl(workspace: str, output: str) -> int:
     return count
 
 
+def _is_safe_tar_member(member: tarfile.TarInfo, ws: str) -> bool:
+    """Validate a tar member is safe to extract into workspace.
+
+    Rejects: absolute paths, traversal via .., symlinks, hardlinks,
+    device files, and any path that resolves outside the workspace.
+    """
+    # Reject absolute paths
+    if os.path.isabs(member.name):
+        return False
+    # Reject .. components
+    if ".." in member.name.split(os.sep) or ".." in member.name.split("/"):
+        return False
+    # Reject symlinks and hardlinks (can point outside workspace)
+    if member.issym() or member.islnk():
+        return False
+    # Reject device files
+    if member.isdev():
+        return False
+    # Final check: resolved path must be inside workspace
+    dest = os.path.realpath(os.path.join(ws, member.name))
+    ws_real = os.path.realpath(ws)
+    try:
+        if os.path.commonpath([ws_real, dest]) != ws_real:
+            return False
+    except ValueError:
+        # Different drives on Windows
+        return False
+    return True
+
+
 def restore_workspace(workspace: str, backup_path: str, force: bool = False) -> dict:
     """Restore a workspace from a tar.gz backup.
 
@@ -273,25 +303,40 @@ def restore_workspace(workspace: str, backup_path: str, force: bool = False) -> 
     """
     ws = os.path.abspath(workspace)
     backup_path = os.path.abspath(backup_path)
-    result = {"restored": 0, "skipped": 0, "conflicts": []}
+    result = {"restored": 0, "skipped": 0, "blocked": 0, "conflicts": []}
 
     with tarfile.open(backup_path, "r:gz") as tar:
-        # Security: check for path traversal
         for member in tar.getmembers():
-            member_path = os.path.join(ws, member.name)
-            if not os.path.abspath(member_path).startswith(ws):
-                _log.warning("path_traversal_blocked", member=member.name)
+            # Security: validate every member before extraction
+            if not _is_safe_tar_member(member, ws):
+                _log.warning("tar_member_blocked", member=member.name,
+                             reason="path traversal or unsafe member type")
+                metrics.inc("restore_workspace_blocked_members")
+                result["blocked"] += 1
                 continue
 
+            member_path = os.path.join(ws, member.name)
             if os.path.exists(member_path) and not force:
                 result["conflicts"].append(member.name)
                 result["skipped"] += 1
             else:
-                tar.extract(member, ws)
+                # Extract by streaming content to a file we open ourselves,
+                # rather than using tar.extract which follows symlinks.
+                if member.isfile():
+                    dest = os.path.join(ws, member.name)
+                    os.makedirs(os.path.dirname(dest), exist_ok=True)
+                    with tar.extractfile(member) as src, open(dest, "wb") as dst:
+                        shutil.copyfileobj(src, dst)
+                elif member.isdir():
+                    os.makedirs(os.path.join(ws, member.name), exist_ok=True)
+                else:
+                    # Skip anything else (fifos, etc.)
+                    continue
                 result["restored"] += 1
 
     _log.info("restore_complete", restored=result["restored"],
-              skipped=result["skipped"], conflicts=len(result["conflicts"]))
+              skipped=result["skipped"], blocked=result["blocked"],
+              conflicts=len(result["conflicts"]))
     return result
 
 
