@@ -138,7 +138,8 @@ def build_workspace(sample: dict, base_dir: str) -> str:
     for session_num, date_str, turns in sessions:
         for turn in turns:
             dia_id = turn.get("dia_id", "")
-            speaker = turn.get("speaker", "unknown")
+            raw_speaker = turn.get("speaker", "unknown")
+            resolved_speaker = speaker_names.get(raw_speaker, raw_speaker)
             text = turn.get("text", "")
 
             # Use dia_id as block ID. LoCoMo uses "D1:3" format.
@@ -147,11 +148,11 @@ def build_workspace(sample: dict, base_dir: str) -> str:
             block_id = f"DIA-{dia_id.replace(':', '-')}"
 
             lines.append(f"[{block_id}]")
-            lines.append(f"Statement: [{speaker}] {text}")
+            lines.append(f"Statement: [{resolved_speaker}] {text}")
             lines.append(f"Date: {date_str}")
             lines.append(f"Status: active")
             lines.append(f"DiaID: {dia_id}")
-            lines.append(f"Tags: session-{session_num}, {speaker}")
+            lines.append(f"Tags: session-{session_num}, {resolved_speaker}")
             lines.append("")
 
     # --- Entity extraction: produce atomic fact cards ---

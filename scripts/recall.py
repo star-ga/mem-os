@@ -663,7 +663,8 @@ _RERANK_W_ENTITY = 0.25
 _RERANK_W_TIME = 0.15
 _RERANK_W_BIGRAM = 0.10
 _RERANK_W_RECENCY = 0.10
-_RERANK_W_SPEAKER = 0.05
+_RERANK_W_SPEAKER = 0.40
+_RERANK_W_SPEAKER_MISMATCH = -0.15
 
 
 def _extract_entities(text: str) -> set[str]:
@@ -811,11 +812,15 @@ def rerank_hits(
             if line > 0:
                 recency_bonus = min(1.0, line / 1000.0)
 
-        # (e) Speaker bonus
+        # (e) Speaker boost / mismatch penalty
         speaker_bonus = 0.0
-        if q_mentioned_speakers and speaker:
-            if speaker in q_mentioned_speakers:
+        if q_mentioned_speakers:
+            if speaker and speaker in q_mentioned_speakers:
                 speaker_bonus = 1.0
+            elif speaker and speaker not in q_mentioned_speakers:
+                # Block belongs to a different speaker than the one asked about
+                speaker_bonus = _RERANK_W_SPEAKER_MISMATCH / max(abs(_RERANK_W_SPEAKER), 0.01)
+            # No speaker tag → neutral (0.0)
 
         # --- Combine ---
         feature_sum = (
@@ -856,7 +861,7 @@ def rerank_hits(
     return hits
 
 
-def recall(workspace: str, query: str, limit: int = 10, active_only: bool = False, graph_boost: bool = False, agent_id: str | None = None, retrieve_wide_k: int = 40, rerank: bool = True, rerank_debug: bool = False) -> list[dict]:
+def recall(workspace: str, query: str, limit: int = 10, active_only: bool = False, graph_boost: bool = False, agent_id: str | None = None, retrieve_wide_k: int = 200, rerank: bool = True, rerank_debug: bool = False) -> list[dict]:
     """Search across all memory files using BM25 scoring. Returns ranked results.
 
     Args:
@@ -1292,8 +1297,8 @@ def main():
     parser.add_argument("--active-only", action="store_true", help="Only search active blocks")
     parser.add_argument("--graph", action="store_true", help="Enable graph-based neighbor boosting")
     parser.add_argument("--json", action="store_true", help="Output as JSON")
-    parser.add_argument("--retrieve-wide-k", type=int, default=40,
-                        help="Candidates to retrieve before reranking (default 40)")
+    parser.add_argument("--retrieve-wide-k", type=int, default=200,
+                        help="Candidates to retrieve before reranking (default 200)")
     parser.add_argument("--no-rerank", action="store_true",
                         help="Disable v7 deterministic reranking (use pure BM25)")
     parser.add_argument("--rerank-debug", action="store_true",

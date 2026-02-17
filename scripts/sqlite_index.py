@@ -420,7 +420,7 @@ def query_index(
     limit: int = 10,
     active_only: bool = False,
     graph_boost: bool = False,
-    retrieve_wide_k: int = 40,
+    retrieve_wide_k: int = 200,
     rerank: bool = True,
     rerank_debug: bool = False,
 ) -> list[dict]:
