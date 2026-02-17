@@ -85,8 +85,8 @@ class TestGetExcerpt(unittest.TestCase):
         self.assertEqual(get_excerpt(block), "D-001")
 
     def test_truncation(self):
-        block = {"Statement": "x" * 200}
-        self.assertEqual(len(get_excerpt(block)), 120)
+        block = {"Statement": "x" * 400}
+        self.assertEqual(len(get_excerpt(block)), 300)
 
 
 class TestRecall(unittest.TestCase):

@@ -630,16 +630,245 @@ def build_xref_graph(all_blocks: list[dict]) -> dict[str, set[str]]:
     return graph
 
 
-def recall(workspace: str, query: str, limit: int = 10, active_only: bool = False, graph_boost: bool = False, agent_id: str | None = None) -> list[dict]:
+# ---------------------------------------------------------------------------
+# v7: Deterministic Reranker — wider retrieve + feature-based re-scoring
+# ---------------------------------------------------------------------------
+
+# Regex for detecting time-intent in queries
+_TIME_INTENT_RE = re.compile(
+    r"\b(what month|what day|when|what date|what year|what week|how long ago"
+    r"|which month|which year|which day|what time)\b",
+    re.IGNORECASE,
+)
+
+# Month and day tokens for time-overlap scoring
+_MONTH_TOKENS = frozenset({
+    "january", "february", "march", "april", "may", "june",
+    "july", "august", "september", "october", "november", "december",
+    "jan", "feb", "mar", "apr", "jun", "jul", "aug", "sep", "oct", "nov", "dec",
+})
+_DAY_TOKENS = frozenset({
+    "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
+    "mon", "tue", "wed", "thu", "fri", "sat", "sun",
+})
+_TEMPORAL_CONTENT_TOKENS = _MONTH_TOKENS | _DAY_TOKENS | frozenset({
+    "yesterday", "tomorrow", "tonight", "weekend",
+    "spring", "summer", "fall", "winter", "autumn",
+    "holiday", "birthday", "anniversary", "christmas",
+    "planned", "planning", "going", "trip", "visit", "travel", "vacation",
+})
+
+# Reranker feature weights (tuned for LoCoMo coverage)
+_RERANK_W_ENTITY = 0.25
+_RERANK_W_TIME = 0.15
+_RERANK_W_BIGRAM = 0.10
+_RERANK_W_RECENCY = 0.10
+_RERANK_W_SPEAKER = 0.05
+
+
+def _extract_entities(text: str) -> set[str]:
+    """Extract likely entity tokens: capitalized words + multi-word proper nouns."""
+    entities = set()
+    for m in re.finditer(r"\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\b", text):
+        entities.add(m.group(0).lower())
+    # Also grab individual capitalized tokens
+    for m in re.finditer(r"\b([A-Z][a-z]{2,})\b", text):
+        entities.add(m.group(0).lower())
+    return entities
+
+
+def _extract_bigram_phrases(text: str) -> set[str]:
+    """Extract 2+ word proper nouns / quoted phrases for exact matching."""
+    phrases = set()
+    # Quoted phrases
+    for m in re.finditer(r'"([^"]{3,})"', text):
+        phrases.add(m.group(1).lower())
+    # Multi-word proper nouns (2-4 capitalized words in sequence)
+    for m in re.finditer(r"\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})\b", text):
+        phrases.add(m.group(0).lower())
+    return phrases
+
+
+def _extract_speaker_names(query: str, all_results: list[dict]) -> set[str]:
+    """Find speaker names mentioned in the query by cross-referencing known speakers."""
+    known_speakers = set()
+    for r in all_results:
+        sp = r.get("speaker", "")
+        if sp:
+            known_speakers.add(sp.lower())
+    query_lower = query.lower()
+    mentioned = set()
+    for sp in known_speakers:
+        if sp in query_lower:
+            mentioned.add(sp)
+    return mentioned
+
+
+def rerank_hits(
+    query: str,
+    hits: list[dict],
+    debug: bool = False,
+) -> list[dict]:
+    """Deterministic reranker: rescores BM25 hits with entity/time/phrase/recency/speaker features.
+
+    Each feature is in [0,1]. Final score = bm25_score + weighted sum of features.
+    The top-1 BM25 hit is always preserved in the final set (anchor rule).
+
+    Args:
+        query: The original search query.
+        hits: BM25-scored results (must have 'score', 'excerpt', 'speaker', optionally 'DiaID').
+        debug: If True, attach '_rerank_features' dict to each hit.
+
+    Returns:
+        Hits with updated scores, sorted descending.
+    """
+    if not hits:
+        return hits
+
+    # Preserve BM25 top-1 anchor
+    bm25_top1_id = hits[0]["_id"] if hits else None
+
+    # --- Extract query signals ---
+    q_entities = _extract_entities(query)
+    q_phrases = _extract_bigram_phrases(query)
+    q_lower = query.lower()
+    has_time_intent = bool(_TIME_INTENT_RE.search(q_lower))
+    q_mentioned_speakers = _extract_speaker_names(query, hits)
+
+    # Plan-related boosting: if query mentions plan/going/trip, boost those verbs
+    plan_intent = bool(re.search(r"\b(plan|going|trip|visit|travel|vacation)\b", q_lower))
+
+    # Find max DiaID for recency normalization
+    max_dia = 0
+    for h in hits:
+        dia = h.get("DiaID", "")
+        if dia:
+            try:
+                # DiaID format varies: could be numeric or "D123" etc.
+                dia_num = int(re.sub(r"[^0-9]", "", dia) or "0")
+                max_dia = max(max_dia, dia_num)
+            except (ValueError, TypeError):
+                pass
+    if max_dia == 0:
+        # Fallback: use position in list
+        max_dia = len(hits)
+
+    for idx, h in enumerate(hits):
+        bm25_score = h["score"]
+        excerpt = h.get("excerpt", "")
+        excerpt_lower = excerpt.lower()
+        tags_str = h.get("tags", "")
+        speaker = h.get("speaker", "").lower()
+
+        # (a) Entity overlap
+        h_entities = _extract_entities(excerpt)
+        # Also extract from tags
+        if tags_str:
+            h_entities |= _extract_entities(tags_str)
+        if q_entities:
+            entity_overlap = len(q_entities & h_entities) / max(1, len(q_entities))
+        else:
+            entity_overlap = 0.0
+
+        # (b) Time overlap
+        time_overlap = 0.0
+        if has_time_intent:
+            # Check if hit contains temporal content tokens
+            hit_tokens = set(re.findall(r"[a-z]+", excerpt_lower))
+            temporal_matches = hit_tokens & _TEMPORAL_CONTENT_TOKENS
+            if temporal_matches:
+                time_overlap = min(1.0, len(temporal_matches) / 2.0)
+            # Also check for date patterns (YYYY-MM-DD, "Month Day", etc.)
+            if re.search(r"\b\d{4}[-/]\d{1,2}[-/]\d{1,2}\b", excerpt):
+                time_overlap = max(time_overlap, 0.5)
+            if re.search(r"\b(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2}\b", excerpt, re.IGNORECASE):
+                time_overlap = max(time_overlap, 0.8)
+            # Plan-intent boost
+            if plan_intent and re.search(r"\b(plan|going|trip|visit|travel|vacation)\b", excerpt_lower):
+                time_overlap = max(time_overlap, 0.6)
+
+        # (c) Bigram phrase bonus
+        bigram_bonus = 0.0
+        if q_phrases:
+            for phrase in q_phrases:
+                if phrase in excerpt_lower:
+                    bigram_bonus = 1.0
+                    break
+
+        # (d) Recency bonus (later turns preferred)
+        recency_bonus = 0.5  # default mid-range
+        dia = h.get("DiaID", "")
+        if dia:
+            try:
+                dia_num = int(re.sub(r"[^0-9]", "", dia) or "0")
+                if max_dia > 0:
+                    recency_bonus = dia_num / max_dia
+            except (ValueError, TypeError):
+                pass
+        else:
+            # Fallback: use line number if available
+            line = h.get("line", 0)
+            if line > 0:
+                recency_bonus = min(1.0, line / 1000.0)
+
+        # (e) Speaker bonus
+        speaker_bonus = 0.0
+        if q_mentioned_speakers and speaker:
+            if speaker in q_mentioned_speakers:
+                speaker_bonus = 1.0
+
+        # --- Combine ---
+        feature_sum = (
+            _RERANK_W_ENTITY * entity_overlap
+            + _RERANK_W_TIME * time_overlap
+            + _RERANK_W_BIGRAM * bigram_bonus
+            + _RERANK_W_RECENCY * recency_bonus
+            + _RERANK_W_SPEAKER * speaker_bonus
+        )
+        h["score"] = round(bm25_score + feature_sum, 4)
+
+        if debug:
+            h["_rerank_features"] = {
+                "entity_overlap": round(entity_overlap, 3),
+                "time_overlap": round(time_overlap, 3),
+                "bigram_bonus": round(bigram_bonus, 3),
+                "recency_bonus": round(recency_bonus, 3),
+                "speaker_bonus": round(speaker_bonus, 3),
+                "feature_sum": round(feature_sum, 4),
+                "bm25_original": round(bm25_score, 4),
+            }
+
+    # Sort by reranked score
+    hits.sort(key=lambda r: r["score"], reverse=True)
+
+    # Anchor rule: ensure BM25 top-1 is in final set
+    if bm25_top1_id:
+        top_ids = {h["_id"] for h in hits[:max(10, len(hits))]}
+        if bm25_top1_id not in {h["_id"] for h in hits[:10]}:
+            # Find it and swap into position
+            for i, h in enumerate(hits):
+                if h["_id"] == bm25_top1_id:
+                    # Insert at position 1 (keep reranked #1, add anchor at #2)
+                    anchor = hits.pop(i)
+                    hits.insert(min(1, len(hits)), anchor)
+                    break
+
+    return hits
+
+
+def recall(workspace: str, query: str, limit: int = 10, active_only: bool = False, graph_boost: bool = False, agent_id: str | None = None, retrieve_wide_k: int = 40, rerank: bool = True, rerank_debug: bool = False) -> list[dict]:
     """Search across all memory files using BM25 scoring. Returns ranked results.
 
     Args:
         workspace: Workspace root path.
         query: Search query.
-        limit: Max results to return.
+        limit: Max results to return (final top-k after reranking).
         active_only: Only return blocks with active status.
         graph_boost: Enable cross-reference neighbor boosting.
         agent_id: Optional agent ID for namespace ACL filtering.
+        retrieve_wide_k: Number of candidates to retrieve before reranking.
+        rerank: Enable deterministic reranking (v7).
+        rerank_debug: Log reranker feature breakdowns.
     """
     query_tokens = tokenize(query)
     if not query_tokens:
@@ -987,20 +1216,41 @@ def recall(workspace: str, query: str, limit: int = 10, active_only: bool = Fals
 
     # Sort by score descending
     results.sort(key=lambda r: r["score"], reverse=True)
-    # Deduplicate by DiaID: when fact cards and source blocks share a DiaID,
-    # keep the highest-scoring one to free top-K slots for other evidence.
-    seen_dia = set()
+
+    # --- v7: Two-stage pipeline — wide BM25 retrieve → dedup → rerank → top-k ---
+    # Stage 1: Take wide candidate set (retrieve_wide_k)
+    wide_k = max(retrieve_wide_k, limit)  # never retrieve fewer than final limit
+    wide_candidates = results[:wide_k]
+
+    # Deduplicate by (file, line) stable key — prevents near-duplicate slots
+    seen_keys = set()
     deduped = []
-    for r in results:
+    for r in wide_candidates:
+        # Primary dedup: file+line
+        stable_key = (r.get("file", ""), r.get("line", 0))
+        if stable_key != ("", 0) and stable_key in seen_keys:
+            continue
+        if stable_key != ("", 0):
+            seen_keys.add(stable_key)
+
+        # Secondary dedup: DiaID (fact cards + source blocks sharing evidence)
         dia = r.get("DiaID", "")
-        if dia and dia in seen_dia:
+        if dia and dia in seen_keys:
             continue
         if dia:
-            seen_dia.add(dia)
+            seen_keys.add(dia)
+
         deduped.append(r)
+
+    # Stage 2: Deterministic rerank (v7)
+    if rerank and len(deduped) > limit:
+        deduped = rerank_hits(query, deduped, debug=rerank_debug)
+
     top = deduped[:limit]
+
     _log.info("query_complete", query=query, query_type=query_type,
-              blocks_searched=N, results=len(top),
+              blocks_searched=N, wide_k=wide_k, reranked=rerank,
+              results=len(top),
               top_score=top[0]["score"] if top else 0)
     metrics.inc("recall_queries")
     metrics.inc("recall_results", len(top))
@@ -1034,6 +1284,12 @@ def main():
     parser.add_argument("--active-only", action="store_true", help="Only search active blocks")
     parser.add_argument("--graph", action="store_true", help="Enable graph-based neighbor boosting")
     parser.add_argument("--json", action="store_true", help="Output as JSON")
+    parser.add_argument("--retrieve-wide-k", type=int, default=40,
+                        help="Candidates to retrieve before reranking (default 40)")
+    parser.add_argument("--no-rerank", action="store_true",
+                        help="Disable v7 deterministic reranking (use pure BM25)")
+    parser.add_argument("--rerank-debug", action="store_true",
+                        help="Show reranker feature breakdowns in JSON output")
     args = parser.parse_args()
 
     # Try vector backend first, fall back to BM25
@@ -1043,9 +1299,13 @@ def main():
             results = backend.search(args.workspace, args.query, args.limit, args.active_only)
         except (OSError, ValueError, TypeError) as e:
             print(f"recall: backend error ({e}), falling back to BM25", file=sys.stderr)
-            results = recall(args.workspace, args.query, args.limit, args.active_only, args.graph)
+            results = recall(args.workspace, args.query, args.limit, args.active_only,
+                             args.graph, retrieve_wide_k=args.retrieve_wide_k,
+                             rerank=not args.no_rerank, rerank_debug=args.rerank_debug)
     else:
-        results = recall(args.workspace, args.query, args.limit, args.active_only, args.graph)
+        results = recall(args.workspace, args.query, args.limit, args.active_only,
+                         args.graph, retrieve_wide_k=args.retrieve_wide_k,
+                         rerank=not args.no_rerank, rerank_debug=args.rerank_debug)
 
     if args.json:
         print(json.dumps(results, indent=2))
@@ -1055,7 +1315,11 @@ def main():
         else:
             for r in results:
                 graph_tag = " [graph]" if r.get("via_graph") else ""
-                print(f"[{r['score']:.3f}] {r['_id']} ({r['type']}{graph_tag}) — {r['excerpt'][:80]}")
+                rerank_tag = ""
+                if args.rerank_debug and "_rerank_features" in r:
+                    feats = r["_rerank_features"]
+                    rerank_tag = f" [rerank: ent={feats['entity_overlap']:.2f} time={feats['time_overlap']:.2f} bi={feats['bigram_bonus']:.2f} rec={feats['recency_bonus']:.2f} spk={feats['speaker_bonus']:.2f}]"
+                print(f"[{r['score']:.3f}] {r['_id']} ({r['type']}{graph_tag}) — {r['excerpt'][:80]}{rerank_tag}")
                 print(f"        {r['file']}:{r['line']}")
 
 
