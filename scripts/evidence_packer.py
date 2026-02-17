@@ -21,7 +21,7 @@ import re
 
 _DENIAL_RE = re.compile(
     r"\b(didn't|did not|never|not|no|denied|refused|won't|can't|cannot|"
-    r"doesn't|does not|hasn't|has not|wasn't|wasn't|isn't)\b",
+    r"doesn't|does not|hasn't|has not|wasn't|isn't)\b",
     re.IGNORECASE,
 )
 
@@ -30,7 +30,7 @@ _SEMANTIC_PREFIX_RE = re.compile(r"^\([^)]{1,80}\)\s*")
 # Patterns that indicate a question is truly adversarial/verification
 # vs a normal factual question misclassified as adversarial
 _ADVERSARIAL_SIGNAL_RE = re.compile(
-    r"\b(ever|never|deny|denied|not\s+mention|was\s+\S+(?:\s+\S+){0,10}\s+said|"
+    r"\b(ever|never|deny|denied|not\s+mention|was\s+said|"
     r"at\s+any\s+point|reject|refuse|contradict|false|untrue)\b",
     re.IGNORECASE,
 )

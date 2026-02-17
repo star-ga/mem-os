@@ -198,6 +198,14 @@ class TestClassifyAbstention:
         assert r2.features["has_ever_pattern"] is False
         assert r1.confidence <= r2.confidence
 
+    def test_never_pattern_also_triggers_penalty(self):
+        """'never' should trigger the same negation penalty as 'ever'."""
+        r = classify_abstention("Did Emma never mention dogs?", IRRELEVANT_HITS)
+        assert r.features["has_ever_pattern"] is True
+        assert r.confidence <= classify_abstention(
+            "What did Emma say about dogs?", IRRELEVANT_HITS
+        ).confidence
+
     def test_result_is_dataclass(self):
         result = classify_abstention("test?", [])
         assert isinstance(result, AbstentionResult)

@@ -97,7 +97,6 @@ def _load_env():
                     if key in _ALLOWED_ENV_KEYS and not os.environ.get(key):
                         os.environ[key] = val.strip()[:512]
 
-_load_env()
 
 
 # ---------------------------------------------------------------------------
@@ -150,7 +149,11 @@ def _llm_chat(
     """Call LLM chat completions API. Supports OpenAI-compatible and Anthropic formats.
 
     Retries on transient errors (429, 5xx, timeouts) with exponential backoff.
+
+    Raises ValueError if max_retries < 1.
     """
+    if max_retries < 1:
+        raise ValueError(f"max_retries must be >= 1, got {max_retries}")
     base_url, api_key, fmt = _resolve_provider(model)
 
     if fmt == "anthropic":
@@ -427,7 +430,6 @@ def evaluate_sample_with_judge(
 
         # Step 2: Build context via mem-os evidence packer (structured for ALL types)
         from evidence_packer import pack_evidence, is_true_adversarial
-        from recall import detect_query_type
 
         # Detect query type for packing strategy
         detected_type = "adversarial" if is_adversarial else detect_query_type(question)
@@ -703,6 +705,7 @@ def _run_single_conv(conv_index: int, args) -> None:
 
 
 def main():
+    _load_env()
     parser = argparse.ArgumentParser(
         description="LoCoMo LLM-as-Judge Evaluation for Mem-OS"
     )

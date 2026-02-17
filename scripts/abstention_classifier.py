@@ -216,7 +216,7 @@ def classify_abstention(
     # (low overlap) and none contain positive evidence, that's a signal
     # the question is unanswerable.
     has_ever_pattern = bool(re.search(
-        r"\b(ever|at any point|at some point)\b", question, re.IGNORECASE
+        r"\b(ever|never|at any point|at some point)\b", question, re.IGNORECASE
     ))
     if has_ever_pattern:
         # Penalize: if asking "did X ever" and no strong evidence
