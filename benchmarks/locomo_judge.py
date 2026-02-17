@@ -56,7 +56,6 @@ def _load_heavy_imports():
     from recall import recall as _recall, detect_query_type as _dqt  # noqa: E402
     recall = _recall
 
-    global detect_query_type
     detect_query_type = _dqt
 
     # Suppress recall structured logging — observability module's handle()
@@ -291,16 +290,9 @@ FINAL_ANSWER (1-2 sentences):"""
 # ---------------------------------------------------------------------------
 
 def _strip_semantic_prefix(text: str) -> str:
-    """Remove leading semantic label prefix e.g. '(identity description who is) '.
-
-    Labels are embedded in Statement for BM25 retrieval weight but should
-    not be shown to the answerer LLM — they degrade answer precision.
-    """
-    if text.startswith("("):
-        close = text.find(") ")
-        if 0 < close < 80:  # sanity bound
-            return text[close + 2:]
-    return text
+    """Remove leading semantic label prefix — delegates to evidence_packer."""
+    from evidence_packer import strip_semantic_prefix
+    return strip_semantic_prefix(text)
 
 
 def format_context(retrieved: list[dict], max_chars: int = 6000) -> str:
@@ -322,9 +314,6 @@ def format_context(retrieved: list[dict], max_chars: int = 6000) -> str:
         parts.append(part)
         total += len(part)
     return "\n".join(parts)
-
-
-    # Deterministic evidence packer lives in mem-os core (scripts/evidence_packer.py)
 
 
 def answer_question(
@@ -689,20 +678,17 @@ def _run_single_conv(conv_index: int, args) -> None:
     try:
         workspace = build_workspace(sample, conv_tmp)
 
-        # Open JSONL for streaming writes (each result appended immediately)
-        _jsonl_f = open(jsonl_path, "w")
-
-        results = evaluate_sample_with_judge(
-            sample, workspace,
-            top_k=args.top_k,
-            answerer_model=args.answerer_model,
-            judge_model=args.judge_model,
-            rate_limit_delay=args.rate_limit,
-            compress=args.compress,
-            _jsonl_stream=_jsonl_f,
-        )
-
-        _jsonl_f.close()
+        # Open JSONL for streaming writes (context manager ensures close on exception)
+        with open(jsonl_path, "w") as _jsonl_f:
+            results = evaluate_sample_with_judge(
+                sample, workspace,
+                top_k=args.top_k,
+                answerer_model=args.answerer_model,
+                judge_model=args.judge_model,
+                rate_limit_delay=args.rate_limit,
+                compress=args.compress,
+                _jsonl_stream=_jsonl_f,
+            )
 
         if results:
             avg = sum(r["judge_score"] for r in results) / len(results)
