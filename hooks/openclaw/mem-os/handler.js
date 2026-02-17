@@ -10,7 +10,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 // Resolve MEM_OS_WORKSPACE from hook config env, process env, or default
-function resolveWorkspace(event: any): string {
+function resolveWorkspace(event) {
   const hookEnv = event.context?.cfg?.hooks?.internal?.entries?.["mem-os"]?.env;
   return (
     hookEnv?.MEM_OS_WORKSPACE ||
@@ -20,7 +20,7 @@ function resolveWorkspace(event: any): string {
 }
 
 // Find mem-os scripts directory (relative to workspace or standard locations)
-function resolveScriptsDir(workspace: string): string | null {
+function resolveScriptsDir(workspace) {
   // Check .mem-os/scripts/ (cloned into project)
   const dotMemOs = path.join(workspace, ".mem-os", "scripts");
   if (fs.existsSync(dotMemOs)) return dotMemOs;
@@ -39,7 +39,7 @@ function resolveScriptsDir(workspace: string): string | null {
   return null;
 }
 
-const handler = async (event: any): Promise<void> => {
+const handler = async (event) => {
   const workspace = resolveWorkspace(event);
 
   if (event.type === "agent" && event.action === "bootstrap") {
