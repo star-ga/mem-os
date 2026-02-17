@@ -35,8 +35,8 @@ from observability import get_logger, metrics, timed
 from recall import (
     CORPUS_FILES, SEARCH_FIELDS, FIELD_WEIGHTS,
     get_excerpt, get_block_type, date_score, detect_query_type,
-    _QUERY_TYPE_PARAMS, tokenize, expand_query, _parse_speaker_from_tags,
-    rerank_hits, _BLOCK_ID_RE,
+    _QUERY_TYPE_PARAMS, tokenize, expand_query, expand_months,
+    _parse_speaker_from_tags, rerank_hits, _BLOCK_ID_RE,
 )
 
 _log = get_logger("sqlite_index")
@@ -444,6 +444,9 @@ def query_index(
 
     query_type = detect_query_type(query)
     qparams = _QUERY_TYPE_PARAMS.get(query_type, _QUERY_TYPE_PARAMS["single-hop"])
+
+    # Month normalization
+    query_tokens = expand_months(query, query_tokens)
 
     if qparams.get("expand_query", True):
         query_tokens = expand_query(query_tokens)

@@ -369,11 +369,21 @@ def main():
         action="store_true",
         help="Re-download dataset even if cached",
     )
+    parser.add_argument(
+        "--conv-ids",
+        type=str,
+        default=None,
+        help="Comma-separated conversation indices to run (e.g. '4,7,8')",
+    )
     args = parser.parse_args()
 
     # 1. Load dataset
     dataset = download_dataset(force=args.force_download)
-    if args.dry_run:
+    if args.conv_ids:
+        conv_indices = [int(x.strip()) for x in args.conv_ids.split(",")]
+        dataset = [dataset[i] for i in conv_indices if i < len(dataset)]
+        print(f"[harness] Running conversations: {conv_indices} ({len(dataset)} total)")
+    elif args.dry_run:
         dataset = dataset[:1]
         print(f"[harness] Dry-run mode: using 1 of {len(dataset)} conversations")
     else:
