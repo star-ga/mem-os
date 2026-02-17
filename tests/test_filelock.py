@@ -23,6 +23,7 @@ class TestFileLockBasic(unittest.TestCase):
         finally:
             os.unlink(path)
 
+    @unittest.skipIf(sys.platform == "win32", "Windows holds exclusive lock on .lock fd")
     def test_lock_file_contains_pid(self):
         with tempfile.NamedTemporaryFile(delete=False) as f:
             path = f.name
@@ -91,8 +92,9 @@ class TestFileLockBasic(unittest.TestCase):
             os.unlink(path)
 
     def test_repr(self):
-        lock = FileLock("/tmp/test.md")
-        self.assertIn("/tmp/test.md", repr(lock))
+        path = os.path.join(tempfile.gettempdir(), "test.md")
+        lock = FileLock(path)
+        self.assertIn("test.md", repr(lock))
 
 
 class TestFileLockTimeout(unittest.TestCase):

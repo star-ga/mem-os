@@ -12,7 +12,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest]
-        python-version: ["3.8", "3.10", "3.12", "3.13"]
+        python-version: ["3.10", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -20,18 +20,19 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Install test dependencies
-        run: pip install pytest
+        run: pip install pytest "fastmcp>=2.0"
 
       - name: Unit tests
         run: python -m pytest tests/ -v
 
       - name: Smoke test
+        if: runner.os != 'Windows'
         run: bash scripts/smoke_test.sh
 
       - name: Validate (Python, cross-platform)
         run: |
-          python scripts/init_workspace.py /tmp/ci-workspace
-          python scripts/validate_py.py /tmp/ci-workspace
+          python scripts/init_workspace.py ${{ runner.temp }}/ci-workspace
+          python scripts/validate_py.py ${{ runner.temp }}/ci-workspace
 
       - name: Packaging check
         run: pip install -e . && python -c "import mem_os"
@@ -58,13 +59,12 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Install test dependencies
-        run: pip install pytest
+        run: pip install pytest "fastmcp>=2.0"
 
       - name: Unit tests
         run: python -m pytest tests/ -v
 
       - name: Validate (Python)
         run: |
-          python scripts/init_workspace.py %TEMP%\ci-workspace
-          python scripts/validate_py.py %TEMP%\ci-workspace
-        shell: cmd
+          python scripts/init_workspace.py ${{ runner.temp }}/ci-workspace
+          python scripts/validate_py.py ${{ runner.temp }}/ci-workspace

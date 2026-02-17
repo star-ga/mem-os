@@ -1477,7 +1477,7 @@ def recall(workspace: str, query: str, limit: int = 10, active_only: bool = Fals
     # Skeptical mode: for distractor-prone queries, keep morph-only tokens
     # separate to penalize expansion-only matches later.
     skeptical = is_skeptical_query(query) and query_type in ("adversarial", "single-hop")
-    morph_tokens = list(query_tokens)  # pre-expansion tokens (morphological only)
+    # morph_tokens preserved for future skeptical-mode penalty scoring
 
     # Query expansion: add domain synonyms
     # adversarial/verification queries use morph_only (no semantic synonyms)
@@ -1830,7 +1830,7 @@ def recall(workspace: str, query: str, limit: int = 10, active_only: bool = Fals
     if query_type == "multi-hop" and results:
         results.sort(key=lambda r: r["score"], reverse=True)
         hop1_top = results[:10]
-        hop1_ids = {r["_id"] for r in hop1_top}
+        # hop1_ids reserved for future deduplication in multi-hop bridging
 
         # Extract bridge terms: capitalized entities from top-10 that aren't in query
         query_lower_set = set(re.findall(r"[a-z]+", query.lower()))

@@ -57,13 +57,16 @@ class WAL:
         self.wal_dir = os.path.join(self.workspace, ".mem-os-wal")
         os.makedirs(self.wal_dir, exist_ok=True)
 
+    _counter = 0  # Monotonic counter to avoid timestamp collisions on Windows
+
     def begin(self, operation: str, target_path: str, content: str) -> str:
         """Write a WAL entry before performing the operation.
 
         Returns the WAL entry ID (used to commit/rollback).
         """
         ts = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
-        entry_id = f"wal-{ts}"
+        WAL._counter += 1
+        entry_id = f"wal-{ts}-{WAL._counter}"
         entry_path = os.path.join(self.wal_dir, f"{entry_id}.json")
 
         entry = {

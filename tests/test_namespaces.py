@@ -122,7 +122,9 @@ class TestNamespaceManager(unittest.TestCase):
 
         paths = ns.resolve_corpus_paths("decisions/DECISIONS.md")
         self.assertEqual(len(paths), 1)
-        self.assertTrue(paths[0].endswith("shared/decisions/DECISIONS.md"))
+        # Normalize separators for cross-platform comparison
+        normalized = paths[0].replace(os.sep, "/")
+        self.assertTrue(normalized.endswith("shared/decisions/DECISIONS.md"))
 
     def test_path_backslash_normalization(self):
         ns = NamespaceManager(self.td, agent_id=None)

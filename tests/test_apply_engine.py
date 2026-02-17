@@ -254,6 +254,7 @@ class TestFingerprintDedup(unittest.TestCase):
             self.assertFalse(is_dup)
 
 
+@unittest.skipIf(sys.platform == "win32", "validate.sh requires bash (Unix only)")
 class TestFreshInitValidate(unittest.TestCase):
     """Verify fresh workspace passes validate.sh with 0 issues."""
 
@@ -314,6 +315,7 @@ class TestFingerprintPayload(unittest.TestCase):
         self.assertEqual(compute_fingerprint(p1), compute_fingerprint(p1))
 
 
+@unittest.skipIf(sys.platform == "win32", "validate.sh requires bash (Unix only)")
 class TestValidateUninitWorkspace(unittest.TestCase):
     """validate.sh should handle uninitialized workspaces gracefully."""
 
