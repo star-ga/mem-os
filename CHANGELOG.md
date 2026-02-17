@@ -2,6 +2,23 @@
 
 All notable changes to Mem-OS are documented in this file.
 
+## 1.1.1 (2026-02-17)
+
+**Hardening: pre-existing audit findings in locomo_judge.py**
+
+### Security
+- Restrict `.env` loader to allowlisted API key names only (6 known keys)
+- Cap environment variable values at 512 characters
+- Clamp judge scores to `[0, 100]` in both JSON parse and regex fallback paths
+
+### Fixed
+- JSONL bare key access (`r["category"]`) → safe `.get()` with try/except
+- Malformed JSONL lines now logged and skipped instead of crashing
+- Score type validation before aggregation
+
+### Changed
+- Test count: 509 → 520 (11 new tests from audit gap-filling)
+
 ## 1.1.0 (2026-02-17)
 
 **Adversarial abstention classifier + auto-ingestion pipeline**
