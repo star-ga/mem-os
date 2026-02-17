@@ -36,7 +36,7 @@ import urllib.error
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _SCRIPTS_DIR = os.path.join(_HERE, "..", "scripts")
 sys.path.insert(0, _SCRIPTS_DIR)
-sys.path.insert(0, _HERE)
+sys.path.append(_HERE)  # append (not insert) — benchmarks/ must not shadow scripts/
 
 # Heavy imports (recall engine, harness) are deferred to avoid loading them
 # in the orchestrator process, which only needs json/subprocess/time.
@@ -760,10 +760,11 @@ def main():
     # LoCoMo10 has exactly 10 conversations. Ensure cache exists via subprocess.
     cache_file = os.path.join(_HERE, ".cache", "locomo10.json")
     if not os.path.isfile(cache_file):
+        harness_path = os.path.join(_HERE, "locomo_harness.py")
         sp.run([sys.executable, "-c",
-                "import sys,os; sys.path.insert(0, os.path.join("
-                f"{_HERE!r}, '..', 'scripts')); sys.path.insert(0, {_HERE!r}); "
-                "from locomo_harness import download_dataset; download_dataset()"],
+                "import sys; sys.path.insert(0, %r); sys.path.insert(0, %r); "
+                "from locomo_harness import download_dataset; download_dataset()"
+                % (_SCRIPTS_DIR, _HERE)],
                timeout=120)
     num_convs = 1 if args.dry_run else 10
 
