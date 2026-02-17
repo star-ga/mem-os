@@ -2,6 +2,16 @@
 
 All notable changes to Mem-OS are documented in this file.
 
+## 1.1.2 (2026-02-17)
+
+**Code quality: remaining pre-existing audit findings**
+
+### Fixed
+- JSONL file handle leaked on exception — bare `open()` replaced with context manager
+- Duplicate `global detect_query_type` declaration removed (dead code)
+- Orphaned unreachable comment after `format_context()` removed
+- `_strip_semantic_prefix()` duplication — now delegates to canonical `evidence_packer.strip_semantic_prefix()`
+
 ## 1.1.1 (2026-02-17)
 
 **Hardening: pre-existing audit findings in locomo_judge.py**
