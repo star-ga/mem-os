@@ -250,3 +250,46 @@ class TestExtractFromConversation:
     def test_empty_turns(self):
         cards = extract_from_conversation([], speaker_a="A", speaker_b="B")
         assert cards == []
+
+    def test_coreference_resolution(self):
+        """D.3: He/she → other speaker within conversation."""
+        turns = [
+            {"speaker": "speaker_a", "dia_id": "D1:1", "text": "He is a great doctor."},
+        ]
+        cards = extract_from_conversation(turns, speaker_a="Alice", speaker_b="Bob")
+        # "He" should resolve to Bob (the other speaker)
+        assert any("Bob" in c["content"] for c in cards)
+
+
+class TestD3Patterns:
+    """Test Phase D.3 extractor patterns."""
+
+    def test_possessive_relation(self):
+        cards = extract_facts("Tim's brother is really cool", speaker="John")
+        rels = [c for c in cards if c["type"] == "RELATION"]
+        assert any("Tim's brother" in c["content"] for c in rels)
+
+    def test_possessive_fact(self):
+        cards = extract_facts("Tim's car broke down yesterday", speaker="John")
+        facts = [c for c in cards if "Tim's car" in c["content"]]
+        assert len(facts) >= 1
+
+    def test_habitual_preference(self):
+        cards = extract_facts("I usually go surfing on weekends", speaker="Tim")
+        prefs = [c for c in cards if c["type"] == "PREFERENCE"]
+        assert any("surfing" in c["content"] for c in prefs)
+
+    def test_habitual_often(self):
+        cards = extract_facts("I often play basketball after work", speaker="Tim")
+        prefs = [c for c in cards if c["type"] == "PREFERENCE"]
+        assert any("basketball" in c["content"] for c in prefs)
+
+    def test_temporal_normalization(self):
+        cards = extract_facts("I visited Paris in March 2023", speaker="Tim")
+        events = [c for c in cards if c["type"] == "EVENT"]
+        assert any(c.get("date", "").startswith("2023-03") for c in events)
+
+    def test_third_person_fact(self):
+        cards = extract_facts("He is a software engineer at Google", speaker="Tim")
+        facts = [c for c in cards if "software engineer" in c.get("content", "")]
+        assert len(facts) >= 1

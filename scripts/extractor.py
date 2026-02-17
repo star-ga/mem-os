@@ -133,6 +133,25 @@ _STATE_RE = re.compile(
     re.IGNORECASE,
 )
 
+# --- D.3 patterns: Possessives, habitual preferences, third-person references ---
+
+# Possessive relation: "Tim's brother", "my wife's doctor", "her sister"
+_POSSESSIVE_RE = re.compile(
+    r"\b([A-Z][a-z]+)'s\s+(\w+(?:\s+\w+)?)\b",
+)
+
+# Habitual preference: "I usually/often/always X", "I prefer X"
+_HABITUAL_RE = re.compile(
+    r"\bi\s+(?:usually|often|always|typically|generally|normally|prefer to|tend to)\s+(.+?)(?:\.|,|!|\?|$)",
+    re.IGNORECASE,
+)
+
+# Third-person fact: "He/She is a X", "He/She works at X" (uses last speaker)
+_THIRD_PERSON_RE = re.compile(
+    r"\b(?:he|she)\s+(is\s+(?:a |an )?.+?|works?\s+(?:at|for|as)\s+.+?|lives?\s+(?:in|at|near)\s+.+?|plays?\s+.+?|loves?\s+.+?|likes?\s+.+?)(?:\.|,|!|\?|$)",
+    re.IGNORECASE,
+)
+
 # Date extraction from surrounding text
 _DATE_MENTION_RE = re.compile(
     r"\b(\d{1,2}\s+(?:january|february|march|april|may|june|july|august|"
@@ -159,8 +178,39 @@ def _clean_content(text: str) -> str:
     return text
 
 
+_MONTH_MAP = {
+    "january": "01", "february": "02", "march": "03", "april": "04",
+    "may": "05", "june": "06", "july": "07", "august": "08",
+    "september": "09", "october": "10", "november": "11", "december": "12",
+}
+
+# D.3: Temporal normalization — "March 2023" → "2023-03", "October 15, 2023" → "2023-10"
+_MONTH_YEAR_RE = re.compile(
+    r"\b(january|february|march|april|may|june|july|august|september|october|november|december)"
+    r"(?:\s+\d{1,2},?)?\s+(\d{4})\b",
+    re.IGNORECASE,
+)
+_YEAR_MONTH_RE = re.compile(
+    r"\b(\d{4})\s*[-/]\s*(\d{1,2})\b",
+)
+
+
 def _extract_date_from_text(text: str) -> Optional[str]:
-    """Try to find a date mention in the text."""
+    """Try to find a date mention in the text. Normalizes to YYYY-MM when possible."""
+    # Try YYYY-MM-DD first
+    m = _YEAR_MONTH_RE.search(text)
+    if m:
+        return f"{m.group(1)}-{m.group(2).zfill(2)}"
+
+    # Try "Month YYYY" pattern
+    m = _MONTH_YEAR_RE.search(text)
+    if m:
+        month = _MONTH_MAP.get(m.group(1).lower(), "")
+        year = m.group(2)
+        if month:
+            return f"{year}-{month}"
+
+    # Fallback to raw date mention
     m = _DATE_MENTION_RE.search(text)
     return m.group(0) if m else None
 
@@ -382,6 +432,66 @@ def extract_facts(
                     "confidence": 0.7,
                 })
 
+    # --- D.3: Possessive relations ("Tim's brother", "John's doctor") ---
+    for m in _POSSESSIVE_RE.finditer(text):
+        owner = m.group(1)
+        thing = _clean_content(m.group(2))
+        if thing and len(thing) > 1 and owner.lower() not in ("i", "it", "this", "that"):
+            # Relation-like: "brother", "sister", "wife", "doctor", "friend"
+            relation_words = {"brother", "sister", "wife", "husband", "mother", "father",
+                              "mom", "dad", "son", "daughter", "friend", "boyfriend",
+                              "girlfriend", "partner", "doctor", "boss", "coach",
+                              "teacher", "neighbor", "roommate", "uncle", "aunt",
+                              "cousin", "grandma", "grandpa", "grandmother", "grandfather"}
+            first_word = thing.split()[0].lower()
+            if first_word in relation_words:
+                cards.append({
+                    "type": "RELATION",
+                    "content": f"{prefix}{owner}'s {thing}",
+                    "speaker": speaker,
+                    "date": date,
+                    "source_id": source_id,
+                    "confidence": 0.75,
+                })
+            else:
+                # Possessive fact: "Tim's car", "John's injury"
+                cards.append({
+                    "type": "FACT",
+                    "content": f"{prefix}{owner}'s {thing}",
+                    "speaker": speaker,
+                    "date": date,
+                    "source_id": source_id,
+                    "confidence": 0.7,
+                })
+
+    # --- D.3: Habitual preferences ("I usually...", "I often...", "I prefer to...") ---
+    for m in _HABITUAL_RE.finditer(text):
+        content = _clean_content(m.group(1))
+        if content and len(content) > 2:
+            cards.append({
+                "type": "PREFERENCE",
+                "content": f"{prefix}usually {content}",
+                "speaker": speaker,
+                "date": date,
+                "source_id": source_id,
+                "confidence": 0.75,
+            })
+
+    # --- D.3: Third-person references ("He is a doctor", "She works at Google") ---
+    # Only extract if we have a speaker context (from previous turn)
+    for m in _THIRD_PERSON_RE.finditer(text):
+        content = _clean_content(m.group(1))
+        if content and len(content) > 2:
+            # These get speaker from context (coreference resolved in extract_from_conversation)
+            cards.append({
+                "type": "FACT",
+                "content": f"{prefix}{content}",
+                "speaker": speaker,
+                "date": date,
+                "source_id": source_id,
+                "confidence": 0.65,
+            })
+
     # Deduplicate by content (keep highest confidence)
     seen = {}
     for card in cards:
@@ -481,9 +591,10 @@ def extract_from_conversation(
         "speaker_a": speaker_a,
         "speaker_b": speaker_b,
     }
+    other_speaker = {"speaker_a": speaker_b, "speaker_b": speaker_a}
     all_cards = []
 
-    for turn in turns:
+    for i, turn in enumerate(turns):
         speaker_key = turn.get("speaker", "")
         speaker_name = speaker_map.get(speaker_key, speaker_key)
         dia_id = turn.get("dia_id", "")
@@ -496,6 +607,21 @@ def extract_from_conversation(
             date=session_date,
             source_id=source_id,
         )
+
+        # D.3: Coreference-lite — if the original text uses "he/she" at key
+        # positions, the extracted card wrongly attributes to the current speaker.
+        # Fix by swapping the speaker prefix to the other speaker's name.
+        coref_name = other_speaker.get(speaker_key, "")
+        if coref_name and re.search(r"\b(?:he|she)\s+(?:is|was|has|had|does|did|went|works?|lives?|plays?|loves?|likes?)\b", text, re.IGNORECASE):
+            sp_prefix = f"{speaker_name} "
+            coref_prefix = f"{coref_name} "
+            for card in cards:
+                content = card.get("content", "")
+                # Only swap if card content starts with current speaker prefix
+                # and the original text had a third-person reference
+                if content.startswith(sp_prefix) and card.get("confidence", 1) <= 0.65:
+                    card["content"] = coref_prefix + content[len(sp_prefix):]
+
         # Carry original dia_id so evaluator can map fact cards to evidence
         for card in cards:
             card["dia_id"] = dia_id
