@@ -62,12 +62,12 @@ Most memory plugins **store and retrieve**. That's table stakes.
 
 Mem OS also **detects when your memory is wrong** — contradictions between decisions, drift from informal choices never formalized, dead decisions nobody references, orphan tasks pointing at nothing — and offers a safe path to fix it.
 
-| Problem | What happens without Mem OS | What Mem OS does |
+| Problem | Without Mem OS | With Mem OS |
 |---|---|---|
-| Two decisions contradict each other | Agent follows whichever it saw last | Flags contradiction, links both, proposes resolution |
-| Decision made in chat, never formalized | Lost after session ends | Auto-captured as signal, proposed for formalization |
-| Old decision nobody follows anymore | Zombie decision confuses future sessions | Detected as "dead", flagged for supersede or archive |
-| Task references deleted decision | Silent breakage | Caught as orphan reference in integrity scan |
+| Contradicting decisions | Follows whichever seen last | Flags, links both, proposes fix |
+| Informal chat decision | Lost after session ends | Auto-captured, proposed to formalize |
+| Stale decision | Zombie confuses future sessions | Detected as dead, flagged |
+| Orphan task reference | Silent breakage | Caught in integrity scan |
 
 ---
 
@@ -80,33 +80,33 @@ Mem-OS recall engine evaluated on two standard long-term memory benchmarks. Zero
 **LongMemEval (ICLR 2025, 470 questions):**
 
 | Category | N | R@1 | R@5 | R@10 | MRR |
-|---|---|---|---|---|---|
-| **Overall** | **470** | **73.2%** | **85.3%** | **88.1%** | **0.784** |
-| Multi-session | 121 | 83.5% | 95.9% | 95.9% | 0.885 |
-| Temporal reasoning | 127 | 76.4% | 91.3% | 92.9% | 0.826 |
-| Knowledge update | 72 | 80.6% | 88.9% | 91.7% | 0.844 |
-| Single-session assistant | 56 | 82.1% | 89.3% | 89.3% | 0.847 |
+|---|--:|--:|--:|--:|--:|
+| **Overall** | **470** | **73.2** | **85.3** | **88.1** | **.784** |
+| Multi-session | 121 | 83.5 | 95.9 | 95.9 | .885 |
+| Temporal | 127 | 76.4 | 91.3 | 92.9 | .826 |
+| Knowledge update | 72 | 80.6 | 88.9 | 91.7 | .844 |
+| Single-session | 56 | 82.1 | 89.3 | 89.3 | .847 |
 
 **LoCoMo (Snap Research, 1986 questions):**
 
 | Category | N | R@1 | R@5 | R@10 | MRR |
-|---|---|---|---|---|---|
-| **Overall** | **1986** | **35.7%** | **58.5%** | **66.9%** | **0.453** |
-| Multi-hop | 321 | 47.4% | 66.4% | 71.0% | 0.549 |
-| Open-domain | 841 | 38.4% | 62.1% | 70.0% | 0.484 |
+|---|--:|--:|--:|--:|--:|
+| **Overall** | **1986** | **35.7** | **58.5** | **66.9** | **.453** |
+| Multi-hop | 321 | 47.4 | 66.4 | 71.0 | .549 |
+| Open-domain | 841 | 38.4 | 62.1 | 70.0 | .484 |
 
 **LoCoMo LLM-as-Judge (retrieve → answer → judge pipeline):**
 
 Same pipeline as Mem0 and Letta evaluations: retrieve context via BM25F, generate answer with LLM, score against gold reference with judge LLM. Directly comparable methodology.
 
-| Pipeline | Judge Model | N | Accuracy (≥50) | Mean Score |
-|---|---|---|---|---|
+| Pipeline | Judge | N | Acc (≥50) | Mean |
+|---|---|--:|--:|--:|
 | **BM25F** | gpt-4o-mini | 1986 | **58.2%** | 54.3 |
 
 Category breakdown (gpt-4o-mini, BM25F, all 10 conversations):
 
-| Category | N | Accuracy (≥50) | Mean Score |
-|---|---|---|---|
+| Category | N | Acc (≥50) | Mean |
+|---|--:|--:|--:|
 | **Overall** | **1986** | **58.2%** | **54.3** |
 | Open-domain | 841 | 75.7% | 68.3 |
 | Temporal | 96 | 70.8% | 61.5 |
@@ -114,25 +114,25 @@ Category breakdown (gpt-4o-mini, BM25F, all 10 conversations):
 | Multi-hop | 321 | 48.6% | 44.4 |
 | Adversarial | 446 | 30.7% | 36.3 |
 
-> **Judge model:** `gpt-4o-mini` (answerer + judge). Same model used by Mem0 and Letta evaluations — directly comparable. Full run: 1986 questions across 10 conversations, 81.4 minutes. BM25F with field-weighted scoring, bigram matching, query type detection, and 2-hop graph traversal.
+> **Judge:** `gpt-4o-mini` (answerer + judge). Same model as Mem0/Letta evals. 1986 questions, 10 conversations, 81 min.
 
 **Competitive landscape:**
 
-| System | LoCoMo Score | Judge Model | Approach |
-|---|---|---|---|
-| Memobase | 75.8% | — | Specialized memory extraction |
-| **Letta** (files) | 74.0% | gpt-4o-mini | Plain files + agent tool use |
-| **Mem0** (graph) | 68.5% | gpt-4o-mini | Graph memory + LLM extraction |
-| **Mem-OS** (BM25F) | **58.2%** | gpt-4o-mini | BM25F recall + Markdown files |
+| System | Score | Approach |
+|---|--:|---|
+| Memobase | 75.8% | Specialized extraction |
+| **Letta** | 74.0% | Files + agent tool use |
+| **Mem0** | 68.5% | Graph + LLM extraction |
+| **Mem-OS** | **58.2%** | BM25F + Markdown files |
 
-> Mem-OS reaches **85%** of Mem0's graph memory score using pure BM25F lexical search — no embeddings, no vector DB, no cloud calls, zero dependencies. The gap reflects single-shot lexical retrieval vs. graph/semantic retrieval; optional vector recall backends can close this further. Mem-OS's unique value is in memory **governance** (contradiction detection, drift analysis, audit trails) and **agent-agnostic shared memory** via MCP — areas these benchmarks do not measure.
+> Mem-OS reaches **85%** of Mem0's score with pure BM25F — no embeddings, no vector DB, no cloud calls. The gap is lexical vs. graph/semantic retrieval; optional vector backends can close it. Mem-OS's unique value is **governance** (contradiction detection, drift, audit trails) and **agent-agnostic shared memory** via MCP — areas these benchmarks don't measure.
 
 **Pipeline modes:**
 
-| Pipeline | API Calls/Q | Description |
-|---|---|---|
-| `BM25` | 2 | Retrieve → Answer → Judge (default) |
-| `BM25 + Compress` | 3 | Retrieve → Compress → Answer → Judge (`--compress`) |
+| Pipeline | Calls/Q | Flow |
+|---|--:|---|
+| `BM25` | 2 | Retrieve → Answer → Judge |
+| `BM25 + Compress` | 3 | Retrieve → Compress → Answer → Judge |
 
 Run benchmarks yourself:
 ```bash
