@@ -20,6 +20,7 @@ Usage:
 
 from __future__ import annotations
 
+import hashlib
 import os
 import re
 import sys
@@ -82,6 +83,15 @@ XREF_PATTERN = re.compile(r"\b[DT]-\d{8}-\d{3}\b")
 
 # Priority mapping from confidence
 CONFIDENCE_TO_PRIORITY = {"high": "P1", "medium": "P2", "low": "P3"}
+
+
+def content_hash(text: str) -> str:
+    """SHA256 hash of normalized text for dedup.
+
+    Normalization: lowercase, collapse whitespace, strip.
+    """
+    normalized = re.sub(r"\s+", " ", text.lower().strip())
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()[:16]
 
 
 # ---------------------------------------------------------------------------
@@ -211,15 +221,20 @@ def append_signals(workspace: str, signals: list[dict], date_str: str) -> int:
     if not os.path.isfile(signals_path):
         return 0
 
-    # Check existing signals to avoid duplicates
+    # Check existing signals to avoid duplicates via content hash
     with open(signals_path, "r", encoding="utf-8") as f:
         existing = f.read()
 
+    # Build set of existing content hashes for O(1) lookup
+    existing_hashes = set(re.findall(r"ContentHash: ([a-f0-9]+)", existing))
+
     new_signals = []
     for sig in signals:
-        # Simple dedup: skip if the text excerpt already appears
-        if sig["text"][:100] in existing:
+        sig_hash = content_hash(sig["text"])
+        # Skip if content hash already exists, or fallback substring match
+        if sig_hash in existing_hashes or sig["text"][:100] in existing:
             continue
+        sig["content_hash"] = sig_hash
         new_signals.append(sig)
 
     if not new_signals:
@@ -248,6 +263,8 @@ def append_signals(workspace: str, signals: list[dict], date_str: str) -> int:
                 f.write(f"Priority: {sig.get('priority', 'P2')}\n")
                 f.write("Status: pending\n")
                 f.write(f"Excerpt: {sig['text']}\n")
+                if sig.get("content_hash"):
+                    f.write(f"ContentHash: {sig['content_hash']}\n")
 
                 # Write structured extraction
                 st = sig.get("structure", {})
