@@ -243,3 +243,102 @@ class TestEdgeCases:
     def test_unicode_query(self):
         result = classify_abstention("Did Emma mention cafe?", RELEVANT_HITS)
         assert isinstance(result, AbstentionResult)
+
+    def test_none_field_values(self):
+        """Hits where fields are present but explicitly None must not crash."""
+        hits = [{"excerpt": None, "score": 5.0, "speaker": None, "_id": "x"}]
+        result = classify_abstention("Did Emma mention dogs?", hits)
+        assert isinstance(result, AbstentionResult)
+
+    def test_top_k_zero_with_nonempty_hits(self):
+        """top_k=0 with non-empty hits must not crash — treated as no hits."""
+        result = classify_abstention("Did Emma mention dogs?", RELEVANT_HITS, top_k=0)
+        assert result.should_abstain is True
+        assert result.confidence == 0.0
+
+    def test_top_k_larger_than_hits(self):
+        result = classify_abstention("Did Emma mention dogs?", RELEVANT_HITS, top_k=100)
+        assert result.features["top_k_examined"] == len(RELEVANT_HITS)
+        assert isinstance(result, AbstentionResult)
+
+    def test_top_k_limits_hits_examined(self):
+        result_k1 = classify_abstention("Did Emma mention dogs?", RELEVANT_HITS, top_k=1)
+        result_k5 = classify_abstention("Did Emma mention dogs?", RELEVANT_HITS, top_k=5)
+        assert result_k1.features["top_k_examined"] == 1
+        assert result_k5.features["top_k_examined"] == 5
+
+    def test_bm25_score_above_10_clamped(self):
+        """BM25 scores above 10 should clamp top1_norm to 1.0."""
+        hits = [_make_hit("Emma mentioned dogs", score=25.0)]
+        result = classify_abstention("Did Emma mention dogs?", hits)
+        assert result.features["top1_score_norm"] == 1.0
+
+
+# ── Exact numerical verification of confidence formula ───────────────
+
+class TestConfidenceFormula:
+    def test_weighted_confidence_exact_all_match(self):
+        """Manual reconstruction: all features maximal, no ever pattern."""
+        # Query "Emma dogs" → entities after stops = {"emma", "dogs"}
+        # Hit: excerpt has both, score=10, speaker=Emma
+        # mean_overlap=1.0, top1_norm=1.0, speaker_cov=1.0,
+        # evidence_density=1.0, negation_penalty=0.0
+        # expected = 0.35*1.0 + 0.20*1.0 + 0.15*1.0 + 0.20*1.0 + (-0.10)*0.0
+        #          = 0.90
+        hit = {"excerpt": "Emma loves dogs", "score": 10.0, "speaker": "Emma"}
+        result = classify_abstention("Emma dogs", [hit], top_k=1)
+        assert abs(result.confidence - 0.90) < 1e-3
+        assert abs(result.features["entity_overlap"] - 1.0) < 1e-4
+        assert abs(result.features["top1_score_norm"] - 1.0) < 1e-4
+        assert abs(result.features["speaker_coverage"] - 1.0) < 1e-4
+        assert abs(result.features["evidence_density"] - 1.0) < 1e-4
+        assert abs(result.features["negation_penalty"] - 0.0) < 1e-4
+
+    def test_weighted_confidence_with_ever_penalty_clamped(self):
+        """When overlap=0 and ever pattern fires, penalty clamps to 0.0."""
+        # Query: "Did Emma ever adopt" → has_ever_pattern=True
+        # Hit: excerpt="budget review", score=1.0, speaker="Finance"
+        # entities after stops: {"emma", "adopt"}
+        # overlap("budget review", {"emma","adopt"}) = 0/2 = 0.0
+        # mean_overlap=0.0, top1_norm=0.1, speaker_cov=0.0 (emma not in finance)
+        # evidence_density=0.0, negation_penalty=1.0-0.0=1.0
+        # expected = 0.35*0.0 + 0.20*0.1 + 0.15*0.0 + 0.20*0.0 + (-0.10)*1.0
+        #          = 0.02 - 0.10 = -0.08 → clamped to 0.0
+        hit = {"excerpt": "budget review", "score": 1.0, "speaker": "Finance"}
+        result = classify_abstention("Did Emma ever adopt", [hit], top_k=1)
+        assert result.confidence == 0.0  # clamped from -0.08
+        assert result.should_abstain is True
+        assert abs(result.features["negation_penalty"] - 1.0) < 1e-4
+
+    def test_no_speaker_neutral_coverage(self):
+        """Queries without a speaker name produce speaker_coverage=0.5."""
+        hits = [_make_hit("The deadline is March 15th", score=8.0, speaker="Manager")]
+        result = classify_abstention("What is the project deadline?", hits)
+        assert result.features["speaker_detected"] is None
+        assert abs(result.features["speaker_coverage"] - 0.5) < 1e-4
+
+    def test_threshold_exact_boundary(self):
+        """confidence == threshold exactly → should NOT abstain (strict <)."""
+        hit = {"excerpt": "Emma loves dogs", "score": 10.0, "speaker": "Emma"}
+        result = classify_abstention("Emma dogs", [hit], top_k=1)
+        exact = result.confidence
+
+        # At exact threshold: must NOT abstain
+        result2 = classify_abstention("Emma dogs", [hit], top_k=1, threshold=exact)
+        assert result2.should_abstain is False
+
+        # Just above: must abstain
+        result3 = classify_abstention("Emma dogs", [hit], top_k=1, threshold=exact + 0.001)
+        assert result3.should_abstain is True
+
+
+# ── Term overlap substring behavior ─────────────────────────────────
+
+class TestTermOverlapSubstring:
+    def test_empty_excerpt(self):
+        assert _term_overlap("", {"emma", "dogs"}) == 0.0
+
+    def test_substring_match_is_intentional(self):
+        """'dog' matches inside 'hotdogs' — substring, not word boundary.
+        This is the current behavior and is pinned here."""
+        assert _term_overlap("hotdogs for sale", {"dog"}) == 1.0

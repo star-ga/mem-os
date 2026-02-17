@@ -30,7 +30,7 @@ _SEMANTIC_PREFIX_RE = re.compile(r"^\([^)]{1,80}\)\s*")
 # Patterns that indicate a question is truly adversarial/verification
 # vs a normal factual question misclassified as adversarial
 _ADVERSARIAL_SIGNAL_RE = re.compile(
-    r"\b(ever|never|deny|denied|not\s+mention|was\s+.*\s+said|"
+    r"\b(ever|never|deny|denied|not\s+mention|was\s+\S+(?:\s+\S+){0,10}\s+said|"
     r"at\s+any\s+point|reject|refuse|contradict|false|untrue)\b",
     re.IGNORECASE,
 )

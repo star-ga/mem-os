@@ -40,7 +40,7 @@ _STOP_WORDS = frozenset({
     "through", "during", "above", "below", "again", "further",
     "ever", "never", "always", "sometimes", "often", "still",
     "already", "even", "really", "quite", "rather",
-    "did", "does", "don", "doesn", "didn", "won", "wouldn", "shouldn",
+    "don", "doesn", "didn", "won", "wouldn", "shouldn",
     "couldn", "hasn", "haven", "hadn", "isn", "aren", "wasn", "weren",
     "mention", "say", "said", "tell", "told", "talk", "discuss",
     "point", "time", "conversation", "actually", "true",
@@ -133,6 +133,10 @@ def _speaker_in_hit(hit: dict, speaker: str) -> bool:
 # after benchmark runs. See docstring for tuning guidance.
 DEFAULT_THRESHOLD = 0.20
 
+# Input length bounds (defense against oversized inputs)
+_MAX_QUESTION_LEN = 4096
+_MAX_TOP_K = 200
+
 # Abstention answer used when classifier fires
 ABSTENTION_ANSWER = (
     "Not enough direct evidence in memory to answer this question."
@@ -168,7 +172,7 @@ def classify_abstention(
     Returns:
         AbstentionResult with should_abstain, confidence, features, forced_answer.
     """
-    if not hits:
+    if not hits or top_k <= 0:
         return AbstentionResult(
             should_abstain=True,
             confidence=0.0,
@@ -176,18 +180,22 @@ def classify_abstention(
             forced_answer=ABSTENTION_ANSWER,
         )
 
+    # Bound inputs to prevent resource exhaustion
+    question = question[:_MAX_QUESTION_LEN]
+    top_k = min(top_k, _MAX_TOP_K)
+
     query_entities = _extract_query_entities(question)
     speaker = _extract_speaker_from_query(question)
     top_hits = hits[:top_k]
 
     # ── Feature 1: Entity overlap (mean across top-K) ────────────
-    overlaps = [_term_overlap(h.get("excerpt", ""), query_entities) for h in top_hits]
+    overlaps = [_term_overlap(h.get("excerpt", "") or "", query_entities) for h in top_hits]
     mean_overlap = sum(overlaps) / len(overlaps) if overlaps else 0.0
 
     # ── Feature 2: Top-1 BM25 score (normalized) ─────────────────
     # BM25 scores vary by corpus; normalize relative to a reasonable
     # threshold. Scores below ~2.0 are typically noise in mem-os.
-    top1_raw = top_hits[0].get("score", 0.0) if top_hits else 0.0
+    top1_raw = (top_hits[0].get("score", 0.0) or 0.0) if top_hits else 0.0
     # Sigmoid-like normalization: maps [0, 10] → [0, ~1.0]
     top1_norm = min(1.0, top1_raw / 10.0) if top1_raw > 0 else 0.0
 
@@ -220,6 +228,9 @@ def classify_abstention(
     # Weights reflect feature importance for adversarial detection.
     # entity_overlap is most important — if the query terms aren't
     # in the results, the results aren't about the question.
+    # Note: negation_penalty intentionally double-counts low overlap
+    # with entity_overlap — "did X ever" questions with poor results
+    # should be penalized more aggressively than regular questions.
     weights = {
         "entity_overlap": 0.35,
         "top1_score": 0.20,

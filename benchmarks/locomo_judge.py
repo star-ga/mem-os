@@ -450,6 +450,7 @@ def evaluate_sample_with_judge(
         # Step 2b: Abstention gate — deterministic pre-LLM confidence check
         # For adversarial queries, check if retrieval has enough direct evidence.
         # If not, force abstention without calling the LLM.
+        abst = None
         abstention_applied = False
         use_adversarial_prompt = False
         if is_adversarial:
