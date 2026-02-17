@@ -550,10 +550,13 @@ def query_index(
         if stable_key != ("", 0):
             seen_keys.add(stable_key)
         dia = r.get("DiaID", "")
-        if dia and dia in seen_keys:
-            continue
         if dia:
-            seen_keys.add(dia)
+            rid = r.get("_id", "")
+            prefix = "FACT" if rid.startswith("FACT-") else "DIA" if rid.startswith("DIA-") else rid[:4]
+            dia_key = (dia, prefix)
+            if dia_key in seen_keys:
+                continue
+            seen_keys.add(dia_key)
         deduped.append(r)
 
     # Rerank

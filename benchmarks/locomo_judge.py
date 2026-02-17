@@ -429,38 +429,45 @@ def evaluate_sample_with_judge(
         # Step 1: Retrieve
         retrieved = recall(workspace, question, limit=top_k, active_only=False)
 
-        # Step 2: Build context via mem-os evidence packer
+        # Step 2: Build context via mem-os evidence packer (structured for ALL types)
         from evidence_packer import pack_evidence, is_true_adversarial
+        from recall import detect_query_type
+
+        # Detect query type for packing strategy
+        detected_type = "adversarial" if is_adversarial else detect_query_type(question)
 
         if is_adversarial:
             _stats["packer"] += 1
             if not _stats.get("first_adv_qi"):
                 _stats["first_adv_qi"] = qi + 1
                 print(f"[milestone] first adversarial-labeled at q{qi+1}/{len(qa_pairs)}", flush=True)
-            context = pack_evidence(
-                retrieved, question=question, query_type="adversarial",
-            )
+
+        # All query types now go through structured pack_evidence
+        context = pack_evidence(
+            retrieved, question=question, query_type=detected_type,
+        )
+
+        use_adversarial_prompt = False
+        if is_adversarial:
             use_adversarial_prompt = is_true_adversarial(question)
             if use_adversarial_prompt and not _stats.get("first_true_adv_qi"):
                 _stats["first_true_adv_qi"] = qi + 1
                 print(f"[milestone] first TRUE adversarial at q{qi+1}/{len(qa_pairs)}", flush=True)
             if not use_adversarial_prompt:
                 _stats["guard_filtered"] += 1
-        else:
-            context = format_context(retrieved)
-            use_adversarial_prompt = False
-            if compress and context.strip():
-                try:
-                    compress_type = category if category in (
-                        "temporal", "multi-hop"
-                    ) else None
-                    context = compress_context(
-                        context, question, _llm_chat, model=answerer_model,
-                        query_type=compress_type,
-                    )
-                    _stats["llm_compress"] += 1
-                except Exception as e:
-                    pass  # Fall back to raw context on compression failure
+
+        if not is_adversarial and compress and context.strip():
+            try:
+                compress_type = category if category in (
+                    "temporal", "multi-hop"
+                ) else None
+                context = compress_context(
+                    context, question, _llm_chat, model=answerer_model,
+                    query_type=compress_type,
+                )
+                _stats["llm_compress"] += 1
+            except Exception:
+                pass  # Fall back to raw context on compression failure
 
         # Step 3: Answer
         try:

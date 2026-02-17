@@ -62,6 +62,7 @@ SEARCH_FIELDS = [
     "Statement", "Title", "Summary", "Description", "Context",
     "Rationale", "Tags", "Keywords", "Name", "Purpose",
     "RootCause", "Fix", "Prevention", "ProposedFix",
+    "Sources",  # Provenance links emitted by fact extractor (e.g. "DIA-D1-3")
 ]
 
 # Fields from ConstraintSignatures
@@ -623,6 +624,35 @@ def get_bigrams(tokens: list[str]) -> set[tuple[str, str]]:
 # ---------------------------------------------------------------------------
 
 # ---------------------------------------------------------------------------
+# Skeptical Mode Detection — distractor-prone query identification
+# ---------------------------------------------------------------------------
+
+_SKEPTICAL_TRIGGERS_RE = re.compile(
+    r"\b(favorite|favourite|least|best|worst|most|one of|"
+    r"as mentioned on|mentioned on \w+|according to|"
+    r"on \d{1,2}(?:st|nd|rd|th)?\s+\w+)\b",
+    re.IGNORECASE,
+)
+
+
+def is_skeptical_query(query: str) -> bool:
+    """Detect if a query is distractor-prone and needs skeptical retrieval.
+
+    Triggers: superlatives, embedded date references, very low lexical specificity.
+    """
+    if _SKEPTICAL_TRIGGERS_RE.search(query):
+        return True
+    # Very short query with broad terms = low specificity
+    words = query.split()
+    if len(words) <= 5:
+        specific = [w for w in words if len(w) > 4 and w.lower() not in
+                     {"what", "which", "where", "about", "their", "there", "these", "those"}]
+        if len(specific) <= 1:
+            return True
+    return False
+
+
+# ---------------------------------------------------------------------------
 # Query Type Detection — category-specific retrieval tuning
 # ---------------------------------------------------------------------------
 
@@ -718,6 +748,14 @@ def detect_query_type(query: str) -> str:
 
     # Only override single-hop if signal is strong enough
     if best == "single-hop" or scores[best] < 1.5:
+        # Distinguish single-hop from open-domain:
+        # Open-domain = short query with no specific temporal/adversarial/multi-hop signal
+        # and broad topic words (what, who, describe, tell me about)
+        if word_count <= 10 and re.search(
+            r"\b(what|who|describe|tell me|identity|about|background)\b",
+            query_lower,
+        ):
+            return "open-domain"
         return "single-hop"
 
     return best
@@ -749,6 +787,12 @@ _QUERY_TYPE_PARAMS = {
         "date_boost": 1.0,
         "expand_query": True,
         "extra_limit_factor": 1.0,
+    },
+    "open-domain": {
+        "recency_weight": 0.2,     # Less recency bias for broad questions
+        "date_boost": 1.0,
+        "expand_query": True,
+        "extra_limit_factor": 2.0, # Retrieve more for diversity
     },
 }
 
@@ -839,10 +883,13 @@ def date_score(block: dict) -> float:
 # Graph-based recall — cross-reference neighbor boosting
 # ---------------------------------------------------------------------------
 
-# Regex matching any block ID pattern (D-..., T-..., PRJ-..., etc.)
+# Regex matching any block ID pattern (D-..., T-..., PRJ-..., DIA-..., FACT-..., etc.)
 _BLOCK_ID_RE = re.compile(
     r"\b(D-\d{8}-\d{3}|T-\d{8}-\d{3}|PRJ-\d{3}|PER-\d{3}|TOOL-\d{3}"
-    r"|INC-\d{3}|C-\d{8}-\d{3}|SIG-\d{8}-\d{3}|P-\d{8}-\d{3})\b"
+    r"|INC-\d{3}|C-\d{8}-\d{3}|SIG-\d{8}-\d{3}|P-\d{8}-\d{3}"
+    r"|DIA-[A-Za-z0-9]+-\d+"       # LoCoMo dialog turns: DIA-D1-3
+    r"|FACT-\d{3,}"                 # Extracted fact cards: FACT-001
+    r")\b"
 )
 
 # Graph neighbor boost factor: a neighbor gets this fraction of the referencing block's score
@@ -906,7 +953,14 @@ def build_xref_graph(all_blocks: list[dict]) -> dict[str, set[str]]:
 # Regex for detecting time-intent in queries
 _TIME_INTENT_RE = re.compile(
     r"\b(what month|what day|when|what date|what year|what week|how long ago"
-    r"|which month|which year|which day|what time)\b",
+    r"|which month|which year|which day|what time"
+    r"|as mentioned on|mentioned on|on\s+(?:january|february|march|april|may|june"
+    r"|july|august|september|october|november|december)"
+    r"|on\s+\d{1,2}(?:st|nd|rd|th)?\s+(?:january|february|march|april|may|june"
+    r"|july|august|september|october|november|december)"
+    r"|in\s+(?:january|february|march|april|may|june|july|august|september"
+    r"|october|november|december)\s+\d{4}"
+    r"|on\s+\d{4}-\d{2}-\d{2})\b",
     re.IGNORECASE,
 )
 
@@ -928,12 +982,14 @@ _TEMPORAL_CONTENT_TOKENS = _MONTH_TOKENS | _DAY_TOKENS | frozenset({
 })
 
 # Reranker feature weights (tuned for LoCoMo coverage)
-_RERANK_W_ENTITY = 0.25
+# v1.0.2: Reduced speaker dominance (was 0.40), increased entity/phrase overlap
+# to avoid "right speaker, wrong topic" over-preference.
+_RERANK_W_ENTITY = 0.30
 _RERANK_W_TIME = 0.15
-_RERANK_W_BIGRAM = 0.10
+_RERANK_W_BIGRAM = 0.15
 _RERANK_W_RECENCY = 0.10
-_RERANK_W_SPEAKER = 0.40
-_RERANK_W_SPEAKER_MISMATCH = -0.15
+_RERANK_W_SPEAKER = 0.25
+_RERANK_W_SPEAKER_MISMATCH = -0.10
 
 
 def _extract_entities(text: str) -> set[str]:
@@ -1418,11 +1474,19 @@ def recall(workspace: str, query: str, limit: int = 10, active_only: bool = Fals
     # Month normalization: inject numeric month tokens for date matching
     query_tokens = expand_months(query, query_tokens)
 
+    # Skeptical mode: for distractor-prone queries, keep morph-only tokens
+    # separate to penalize expansion-only matches later.
+    skeptical = is_skeptical_query(query) and query_type in ("adversarial", "single-hop")
+    morph_tokens = list(query_tokens)  # pre-expansion tokens (morphological only)
+
     # Query expansion: add domain synonyms
     # adversarial/verification queries use morph_only (no semantic synonyms)
     expand_mode = qparams.get("expand_query", True)
     if expand_mode:
         mode = expand_mode if isinstance(expand_mode, str) else "full"
+        # In skeptical mode, force morph_only to suppress semantic drift
+        if skeptical:
+            mode = "morph_only"
         query_tokens = expand_query(query_tokens, mode=mode)
 
     # Force graph boost for multi-hop queries
@@ -1757,6 +1821,90 @@ def recall(workspace: str, query: str, limit: int = 10, active_only: bool = Fals
                             result["DiaID"] = block["DiaID"]
                         results.append(result)
 
+    # --- Chain-of-retrieval for multi-hop queries ---
+    # Emulates iterative search deterministically:
+    # 1. Take top-N from first pass
+    # 2. Extract bridge terms (capitalized entities, rare shared tokens)
+    # 3. Re-score all blocks using bridge terms
+    # 4. Merge new hits into results
+    if query_type == "multi-hop" and results:
+        results.sort(key=lambda r: r["score"], reverse=True)
+        hop1_top = results[:10]
+        hop1_ids = {r["_id"] for r in hop1_top}
+
+        # Extract bridge terms: capitalized entities from top-10 that aren't in query
+        query_lower_set = set(re.findall(r"[a-z]+", query.lower()))
+        bridge_terms = Counter()
+        for r in hop1_top:
+            excerpt = r.get("excerpt", "")
+            # Capitalized entities
+            for m in re.finditer(r"\b([A-Z][a-z]{2,})\b", excerpt):
+                term = m.group(1).lower()
+                if term not in query_lower_set and term not in _STOPWORDS:
+                    bridge_terms[term] += 1
+            # Rare content tokens (appear in 2+ of top-10)
+            for tok in tokenize(excerpt):
+                if tok not in set(query_tokens) and len(tok) > 3:
+                    bridge_terms[tok] += 0.5
+
+        # Keep bridge terms that appear in 2+ top-10 results
+        bridge_tokens = [t for t, c in bridge_terms.most_common(12) if c >= 2]
+
+        if bridge_tokens:
+            # Second retrieval pass using bridge terms
+            for i, block in enumerate(all_blocks):
+                bid = block.get("_id", "?")
+                if bid in {r["_id"] for r in results}:
+                    continue  # already in results
+
+                ft = doc_field_tokens[i]
+                flat = doc_flat_tokens[i]
+                if not flat:
+                    continue
+
+                weighted_tf_br = Counter()
+                wdl = 0.0
+                for field, tokens in ft.items():
+                    w = FIELD_WEIGHTS.get(field, 1.0)
+                    wdl += len(tokens) * w
+                    for t in tokens:
+                        weighted_tf_br[t] += w
+
+                bridge_score = 0.0
+                for bt in bridge_tokens:
+                    if bt in weighted_tf_br:
+                        wtf = weighted_tf_br[bt]
+                        idf = math.log((N - df.get(bt, 0) + 0.5) / (df.get(bt, 0) + 0.5) + 1)
+                        numerator = wtf * (BM25_K1 + 1)
+                        denominator = wtf + BM25_K1 * (1 - BM25_B + BM25_B * wdl / avg_wdl)
+                        bridge_score += idf * numerator / denominator
+
+                if bridge_score > 0:
+                    # Also check original query overlap — bridge-only hits with
+                    # zero original query overlap are likely noise
+                    orig_overlap = sum(1 for qt in query_tokens if qt in weighted_tf_br)
+                    if orig_overlap > 0:
+                        # Blend: 0.3 * bridge_score (second hop is supplementary)
+                        tags_str = block.get("Tags", "")
+                        result = {
+                            "_id": bid,
+                            "type": get_block_type(bid),
+                            "score": round(bridge_score * 0.3, 4),
+                            "excerpt": get_excerpt(block),
+                            "speaker": _parse_speaker_from_tags(tags_str),
+                            "tags": tags_str,
+                            "file": block.get("_source_file", "?"),
+                            "line": block.get("_line", 0),
+                            "status": block.get("Status", ""),
+                            "via_chain": True,
+                        }
+                        if block.get("DiaID"):
+                            result["DiaID"] = block["DiaID"]
+                        results.append(result)
+
+            _log.info("chain_of_retrieval", bridge_terms=bridge_tokens[:5],
+                      new_hits=sum(1 for r in results if r.get("via_chain")))
+
     # Sort by score descending
     results.sort(key=lambda r: r["score"], reverse=True)
 
@@ -1776,12 +1924,16 @@ def recall(workspace: str, query: str, limit: int = 10, active_only: bool = Fals
         if stable_key != ("", 0):
             seen_keys.add(stable_key)
 
-        # Secondary dedup: DiaID (fact cards + source blocks sharing evidence)
+        # Secondary dedup: DiaID — compound key (DiaID, id_prefix) so one FACT
+        # and one DIA can coexist for the same dialog turn.
         dia = r.get("DiaID", "")
-        if dia and dia in seen_keys:
-            continue
         if dia:
-            seen_keys.add(dia)
+            rid = r.get("_id", "")
+            prefix = "FACT" if rid.startswith("FACT-") else "DIA" if rid.startswith("DIA-") else rid[:4]
+            dia_key = (dia, prefix)
+            if dia_key in seen_keys:
+                continue
+            seen_keys.add(dia_key)
 
         deduped.append(r)
 

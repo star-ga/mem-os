@@ -95,6 +95,16 @@ _EVENT_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Update/change events: "I changed/switched/stopped/quit/resumed X"
+_UPDATE_RE = re.compile(
+    r"\bi\s+(changed|switched to|switched from|stopped|quit|gave up|"
+    r"resumed|restarted|went back to|returned to|moved from|"
+    r"upgraded to|downgraded|replaced|swapped|transitioned to|"
+    r"decided to|decided against|changed my mind about|"
+    r"no longer|dropped|cancelled|canceled|postponed)\s+(.+?)(?:\.|,|!|\?|$)",
+    re.IGNORECASE,
+)
+
 # Gerund event: "Researching X", "Painting X", "Working on X" (at sentence start)
 _GERUND_RE = re.compile(
     r"^(researching|painting|working on|studying|learning|practicing|"
@@ -409,6 +419,22 @@ def extract_facts(
                 "date": date,
                 "source_id": source_id,
                 "confidence": 0.7,
+            })
+
+    # --- Update/change events ---
+    for m in _UPDATE_RE.finditer(text):
+        verb = m.group(1).strip()
+        obj = _clean_content(m.group(2))
+        if obj and len(obj) > 2:
+            obj = re.split(r"\s+[-–—]\s+|\s+and\s+(?:it|I|he|she|they|we)\b", obj, maxsplit=1)[0].strip()
+            event_date = mentioned_date or date
+            cards.append({
+                "type": "EVENT",
+                "content": f"{prefix}{verb} {obj}",
+                "speaker": speaker,
+                "date": event_date,
+                "source_id": source_id,
+                "confidence": 0.8,
             })
 
     # --- Activity lists: "running, reading, or playing my violin" ---
