@@ -534,6 +534,8 @@ BM25F scoring (k1=1.2, b=0.75) with per-field weighting (Statement: 3x, Title: 2
 
 **Query type detection:** Automatically classifies queries as temporal, multi-hop, adversarial, or single-hop using pattern-based heuristics. Temporal queries get 2x date boost and higher recency weight. Multi-hop queries force graph traversal. Query expansion covers auth, database, API, deployment, testing, security, performance, and infrastructure terms.
 
+**Adversarial abstention classifier:** Deterministic pre-LLM confidence gate for adversarial/verification queries. Computes confidence from entity overlap, BM25 score, speaker coverage, evidence density, and negation asymmetry. Below threshold → forces abstention without calling the LLM, preventing hallucinated answers to unanswerable questions. Conservative default threshold (0.20) tunable per deployment.
+
 **Stemming:** "queries" matches "query", "deployed" matches "deployment", "authenticating" matches "authentication". Simplified Porter stemmer with zero dependencies.
 
 ### Graph-Based (2-hop cross-reference boost)

@@ -447,6 +447,10 @@ def evaluate_sample_with_judge(
             retrieved, question=question, query_type=detected_type,
         )
 
+        # Step 2b: Abstention gate — deterministic pre-LLM confidence check
+        # For adversarial queries, check if retrieval has enough direct evidence.
+        # If not, force abstention without calling the LLM.
+        abstention_applied = False
         use_adversarial_prompt = False
         if is_adversarial:
             use_adversarial_prompt = is_true_adversarial(question)
@@ -455,6 +459,15 @@ def evaluate_sample_with_judge(
                 print(f"[milestone] first TRUE adversarial at q{qi+1}/{len(qa_pairs)}", flush=True)
             if not use_adversarial_prompt:
                 _stats["guard_filtered"] += 1
+
+            # Abstention classifier: runs on all adversarial-labeled questions
+            if use_adversarial_prompt:
+                from abstention_classifier import classify_abstention
+                abst = classify_abstention(question, retrieved)
+                if abst.should_abstain:
+                    abstention_applied = True
+                    _stats.setdefault("abstention_fired", 0)
+                    _stats["abstention_fired"] += 1
 
         if not is_adversarial and compress and context.strip():
             try:
@@ -469,13 +482,18 @@ def evaluate_sample_with_judge(
             except Exception:
                 pass  # Fall back to raw context on compression failure
 
-        # Step 3: Answer
-        try:
-            generated = answer_question(
-                question, context, use_adversarial_prompt, model=answerer_model
-            )
-        except Exception as e:
-            generated = f"Error: {e}"
+        # Step 3: Answer (skip LLM if abstention classifier fired)
+        if abstention_applied:
+            generated = abst.forced_answer
+            _stats.setdefault("llm_skipped", 0)
+            _stats["llm_skipped"] += 1
+        else:
+            try:
+                generated = answer_question(
+                    question, context, use_adversarial_prompt, model=answerer_model
+                )
+            except Exception as e:
+                generated = f"Error: {e}"
 
         # Step 4: Judge
         try:
@@ -494,6 +512,10 @@ def evaluate_sample_with_judge(
             "judge_score": judgment["score"],
             "judge_reason": judgment["reason"],
         }
+        if abstention_applied:
+            record["abstention"] = True
+            record["abstention_confidence"] = abst.confidence
+            record["abstention_features"] = abst.features
         results.append(record)
 
         # Stream to JSONL immediately (survives crashes, enables tail -f)
@@ -822,7 +844,7 @@ def main():
     api_calls = total_questions * (3 if args.compress else 2)
     print(f"API calls: {api_calls}")
     if args.compress:
-        print(f"Pipeline: Retrieve → Compress → Answer → Judge")
+        print("Pipeline: Retrieve → Compress → Answer → Judge")
 
     # Merge all per-conv JSONL files into final output
     per_question = []

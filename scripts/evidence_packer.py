@@ -87,6 +87,21 @@ def _overlap_score(r: dict, query_tokens: set) -> float:
     return sum(1 for t in query_tokens if t in excerpt) / max(1, len(query_tokens))
 
 
+def check_abstention(
+    question: str,
+    hits: list[dict],
+    threshold: float = 0.20,
+) -> tuple[bool, str, float]:
+    """Production abstention gate for MCP recall path.
+
+    Thin wrapper around abstention_classifier.classify_abstention().
+    Returns (should_abstain, forced_answer, confidence).
+    """
+    from abstention_classifier import classify_abstention
+    result = classify_abstention(question, hits, threshold=threshold)
+    return result.should_abstain, result.forced_answer, result.confidence
+
+
 def pack_evidence(
     hits: list[dict],
     question: str = "",

@@ -2,6 +2,37 @@
 
 All notable changes to Mem-OS are documented in this file.
 
+## 1.1.0 (2026-02-17)
+
+**Adversarial abstention classifier + auto-ingestion pipeline**
+
+Major retrieval quality improvement targeting LoCoMo adversarial accuracy (30.7% → projected 50%+).
+
+### Added
+
+#### Adversarial Abstention Classifier
+- New `scripts/abstention_classifier.py`: deterministic pre-LLM confidence gate
+- Computes confidence from 5 features: entity overlap, BM25 score, speaker coverage, evidence density, negation asymmetry
+- Below threshold → forces abstention ("Not enough direct evidence") without calling the LLM
+- Integrated into `locomo_judge.py` benchmark pipeline (between pack_evidence and answer_question)
+- Exposed via `evidence_packer.check_abstention()` for production MCP path
+- Conservative default threshold (0.20) — tunable per benchmark run
+- 31 new tests covering unit features, integration, and edge cases
+
+#### Auto-Ingestion Pipeline
+- `session_summarizer.py`: automatic session summary generation
+- `entity_ingest.py`: regex-based entity extraction (projects, tools, people)
+- `cron_runner.py`: scheduled transcript scanning and entity ingestion
+- `bootstrap_corpus.py`: one-time backfill from existing transcripts
+- SHA256 content-hash deduplication in `capture.py`
+- JSONL transcript capture in `session-end.sh`
+- Per-feature toggles in `mem-os.json` `auto_ingest` section
+
+### Changed
+- `evidence_packer.py`: added `check_abstention()` wrapper function
+- `locomo_judge.py`: abstention gate inserted in adversarial evaluation pipeline; fixed bare f-string lint warning
+- Test count: 478 → 509
+
 ## 1.0.2 (2026-02-17)
 
 **Cross-platform CI hardening + professional polish**
