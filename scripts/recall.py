@@ -506,8 +506,17 @@ for _key, _syns in _QUERY_EXPANSIONS.items():
         _EXPANSION_BY_STEM[_key] = list(_syns)
 
 
-def expand_query(tokens: list[str], max_expansions: int = 8) -> list[str]:
-    """Expand query tokens with domain synonyms. Returns expanded token list."""
+def expand_query(tokens: list[str], max_expansions: int = 8,
+                  mode: str = "full") -> list[str]:
+    """Expand query tokens with domain synonyms. Returns expanded token list.
+
+    mode="full": apply all semantic synonyms (default).
+    mode="morph_only": skip semantic synonym expansion entirely.
+        Lemma normalization and month expansion happen BEFORE this function,
+        so morph_only still benefits from those normalizations.
+    """
+    if mode == "morph_only":
+        return list(tokens)
     expanded = list(tokens)
     added = set(tokens)
     for token in tokens:
@@ -641,6 +650,19 @@ _ADVERSARIAL_PATTERNS = re.compile(
     re.IGNORECASE,
 )
 
+# Broader verification-intent patterns — queries expecting yes/no confirmation.
+# These need precision over recall, so semantic synonym expansion is suppressed.
+_VERIFICATION_INTENT_RE = re.compile(
+    r"(?:"
+    r"^(?:did|was|were|is|has|have|does|do)\s+"   # Yes/no question openers
+    r"|(?:ever|actually|really)\b"                  # Certainty qualifiers
+    r"|(?:is it true|is that true|is this true)"    # Truth verification
+    r"|(?:no mention|not mention|never mention)"    # Absence checks
+    r"|(?:deny|denied|denial)\b"                    # Denial patterns
+    r")",
+    re.IGNORECASE,
+)
+
 # Multi-hop indicators (questions requiring info from multiple sources)
 _MULTIHOP_PATTERNS = re.compile(
     r"\b(both|and also|as well as|in addition|together|combined"
@@ -682,6 +704,9 @@ def detect_query_type(query: str) -> str:
     # "Did X ever" is also adversarial (expects yes/no about something that may not have happened)
     if re.search(r"\bever\b", query_lower):
         scores["adversarial"] += 2
+    # Broader verification intent (yes/no confirmation queries)
+    if _VERIFICATION_INTENT_RE.search(query_lower):
+        scores["adversarial"] += 1.5
 
     # Long queries with conjunctions are more likely multi-hop
     word_count = len(query.split())
@@ -709,7 +734,7 @@ _QUERY_TYPE_PARAMS = {
     "adversarial": {
         "recency_weight": 0.3,     # Standard — adversarial needs same broad recall
         "date_boost": 1.0,         # No date boost
-        "expand_query": True,      # Keep expansion — adversarial answers ARE in context
+        "expand_query": "morph_only",  # Lemma + months only, no semantic synonyms
         "extra_limit_factor": 1.0, # Standard — handled at answerer level, not retrieval
     },
     "multi-hop": {
@@ -1393,9 +1418,12 @@ def recall(workspace: str, query: str, limit: int = 10, active_only: bool = Fals
     # Month normalization: inject numeric month tokens for date matching
     query_tokens = expand_months(query, query_tokens)
 
-    # Query expansion: add domain synonyms (skip for adversarial — precision over recall)
-    if qparams.get("expand_query", True):
-        query_tokens = expand_query(query_tokens)
+    # Query expansion: add domain synonyms
+    # adversarial/verification queries use morph_only (no semantic synonyms)
+    expand_mode = qparams.get("expand_query", True)
+    if expand_mode:
+        mode = expand_mode if isinstance(expand_mode, str) else "full"
+        query_tokens = expand_query(query_tokens, mode=mode)
 
     # Force graph boost for multi-hop queries
     if qparams.get("graph_boost_override", False):

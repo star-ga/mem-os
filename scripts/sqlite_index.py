@@ -448,8 +448,10 @@ def query_index(
     # Month normalization
     query_tokens = expand_months(query, query_tokens)
 
-    if qparams.get("expand_query", True):
-        query_tokens = expand_query(query_tokens)
+    expand_mode = qparams.get("expand_query", True)
+    if expand_mode:
+        mode = expand_mode if isinstance(expand_mode, str) else "full"
+        query_tokens = expand_query(query_tokens, mode=mode)
 
     if qparams.get("graph_boost_override", False):
         graph_boost = True
