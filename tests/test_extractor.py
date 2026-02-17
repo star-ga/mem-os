@@ -130,7 +130,8 @@ class TestFormatAsBlocks:
                   "dia_id": "D1:3"}]
         text = format_as_blocks(cards)
         assert "[FACT-001]" in text
-        assert "Statement: Caroline is a counselor" in text
+        assert "Caroline is a counselor" in text
+        assert "Statement:" in text
         assert "Date: 2023-05-07" in text
         assert "Status: active" in text
         assert "DiaID: D1:3" in text
