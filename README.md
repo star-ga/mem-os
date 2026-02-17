@@ -11,14 +11,13 @@
     <a href="https://github.com/star-ga/mem-os/releases"><img src="https://img.shields.io/github/v/release/star-ga/mem-os?style=flat-square&color=green" alt="Release"></a>
     <img src="https://img.shields.io/badge/python-3.8%2B-blue?style=flat-square&logo=python&logoColor=white" alt="Python 3.8+">
     <img src="https://img.shields.io/badge/dependencies-zero-brightgreen?style=flat-square" alt="Zero Dependencies">
-    <a href="https://github.com/star-ga/mem-os/stargazers"><img src="https://img.shields.io/github/stars/star-ga/mem-os?style=flat-square" alt="Stars"></a>
-    <img src="https://img.shields.io/badge/OpenClaw-latest-purple?style=flat-square" alt="OpenClaw latest">
+    <img src="https://img.shields.io/badge/OpenClaw-2026.2-purple?style=flat-square&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0id2hpdGUiPjxwYXRoIGQ9Ik0xMiAyQzYuNDggMiAyIDYuNDggMiAxMnM0LjQ4IDEwIDEwIDEwIDEwLTQuNDggMTAtMTBTMTcuNTIgMiAxMiAyem0wIDE4Yy00LjQyIDAtOC0zLjU4LTgtOHMzLjU4LTggOC04IDggMy41OCA4IDgtMy41OCA4LTggOHoiLz48L3N2Zz4=" alt="OpenClaw 2026.2">
   </p>
 </p>
 
 ---
 
-Drop-in memory layer for [OpenClaw](https://github.com/anthropics/claude-code) (latest). Upgrades your agent from "chat history + notes" to a governed **Memory OS** with structured persistence, contradiction detection, drift analysis, safe governance, and full audit trail.
+Drop-in memory layer for [OpenClaw](https://github.com/openclaw/openclaw) (2026.2+). Upgrades your agent from "chat history + notes" to a governed **Memory OS** with structured persistence, contradiction detection, drift analysis, safe governance, and full audit trail.
 
 > **If your agent runs for weeks, it will drift. Mem OS prevents silent drift.**
 
@@ -249,6 +248,32 @@ Gives you `/scan`, `/apply`, and `/recall` slash commands in Claude Code.
 
 ### 7. Add hooks (optional)
 
+**Option A: OpenClaw hooks** (recommended for OpenClaw 2026.2+)
+
+```bash
+cp -r .mem-os/hooks/openclaw/mem-os ~/.openclaw/hooks/mem-os
+openclaw hooks enable mem-os
+```
+
+Configure workspace path in `~/.openclaw/openclaw.json`:
+
+```json
+{
+  "hooks": {
+    "internal": {
+      "entries": {
+        "mem-os": {
+          "enabled": true,
+          "env": { "MEM_OS_WORKSPACE": "/path/to/your/workspace" }
+        }
+      }
+    }
+  }
+}
+```
+
+**Option B: Claude Code hooks** (shell-based, works with any Claude Code-compatible tool)
+
 Merge into your `.claude/hooks.json`:
 
 ```json
@@ -448,7 +473,7 @@ Compared against every major memory solution for AI agents (as of 2026):
 | Zero deps | — | — | — | — | — | — | — | — | **✓** |
 | No daemon | — | — | — | — | — | ✓ | — | — | **✓** |
 | Git-friendly | — | — | — | Part | — | — | — | — | **✓** |
-| OpenClaw | — | Plug | Plug | — | — | Plug | — | — | **Native** |
+| OpenClaw | — | Plug | Plug | — | — | Plug | — | — | **Native (hooks + MCP)** |
 | MCP server | — | — | — | — | — | — | — | — | **✓** |
 
 ### What Each Tool Does Best
@@ -778,7 +803,7 @@ Add to your MCP config (`.cursor/mcp.json` or equivalent):
 }
 ```
 
-### OpenClaw (Claude Code)
+### OpenClaw (2026.2+)
 
 ```bash
 # stdio transport (default)
