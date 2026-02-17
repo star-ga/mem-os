@@ -1,6 +1,6 @@
 # Mem-OS — MCP Community Listing
 
-Append-only, auditable memory with contradiction detection, drift analysis, namespaces, proposals, and BM25 recall. Zero dependencies, git-diffable Markdown blocks. Built for OpenClaw/Claude coding agents.
+Append-only, auditable memory with contradiction detection, drift analysis, namespaces, proposals, and BM25 recall. Zero dependencies, git-diffable Markdown blocks. Built for AI coding agents — works with Claude Code, Claude Desktop, Cursor, Windsurf, OpenClaw, or any MCP client.
 
 ## Features
 

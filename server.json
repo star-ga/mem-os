@@ -1,7 +1,7 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.star-ga/mem-os",
-  "description": "Append-only, auditable memory with contradiction detection, drift analysis, namespaces, proposals, and BM25 recall. Zero dependencies, git-diffable Markdown blocks. Ideal for OpenClaw/Claude coding agents.",
+  "description": "Append-only, auditable memory with contradiction detection, drift analysis, namespaces, proposals, and BM25 recall. Zero dependencies, git-diffable Markdown blocks. Works with any MCP-compatible client (Claude Code, Claude Desktop, Cursor, Windsurf, OpenClaw).",
   "title": "Mem-OS",
   "websiteUrl": "https://github.com/star-ga/mem-os",
   "repository": {

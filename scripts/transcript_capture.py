@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""mem-os OpenClaw Transcript JSONL Capture. Zero external deps.
+"""mem-os Transcript JSONL Capture. Zero external deps.
 
-Scans Claude Code / OpenClaw transcript JSONL files for:
+Scans Claude Code transcript JSONL files for:
 - Decision-like language (same patterns as capture.py)
 - User corrections ("don't do X", "always do Y", "never use Z")
 - Convention discoveries ("the pattern is", "the convention is")

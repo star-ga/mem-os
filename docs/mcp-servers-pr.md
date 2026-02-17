@@ -17,7 +17,7 @@ Add Mem-OS: governance-safe, contradiction-proof memory for coding agents
 
 Adds [Mem-OS](https://github.com/star-ga/mem-os) to the community servers list.
 
-Mem-OS is a persistent, auditable memory layer for AI coding agents (Claude Desktop, OpenClaw, Cursor, Windsurf). Key differentiators from existing memory servers:
+Mem-OS is a persistent, auditable memory layer for AI coding agents (Claude Code, Claude Desktop, Cursor, Windsurf, OpenClaw). Key differentiators from existing memory servers:
 
 - **Proposal-based governance**: `propose_update` writes to SIGNALS.md only — never mutates source of truth. All changes require explicit `/apply`.
 - **Integrity engine**: Contradiction detection (ConstraintSignatures), drift analysis, dead decision detection, coverage scoring.

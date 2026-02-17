@@ -50,7 +50,7 @@ python3 scripts/init_workspace.py /tmp/test-ws
 3. Run the server:
 
 ```bash
-# stdio transport (for Claude Desktop / OpenClaw)
+# stdio transport (for Claude Code / Claude Desktop)
 MEM_OS_WORKSPACE=/tmp/test-ws python3 mcp_server.py
 
 # HTTP transport (for multi-client / remote)

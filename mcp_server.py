@@ -2,8 +2,8 @@
 """Mem-OS MCP Server — persistent memory for paranoid/safety-first coding agents.
 
 Exposes Mem-OS as a Model Context Protocol server, making structured memory
-accessible to any MCP-compatible client (Claude Desktop, Cursor, Windsurf,
-OpenClaw).
+accessible to any MCP-compatible client (Claude Code, Claude Desktop, Cursor,
+Windsurf, OpenClaw).
 
 Resources (read-only):
     mem-os://decisions         — All active decisions
@@ -24,11 +24,11 @@ Tools:
     list_contradictions  — List detected contradictions with resolution status
 
 Transport:
-    stdio (default, for Claude Desktop / OpenClaw)
+    stdio (default, for Claude Code / Claude Desktop)
     http  (for remote / multi-client)
 
 Usage:
-    # stdio (Claude Desktop / OpenClaw)
+    # stdio (Claude Code / Claude Desktop)
     python3 mcp_server.py
 
     # http

@@ -1,4 +1,4 @@
-# Mem OS for OpenClaw — Memory + Immune System
+# Mem OS — Memory + Immune System for AI Coding Agents
 
 ## Available Commands
 - `/scan` — Run contradiction detection, drift analysis, impact graph, snapshot, briefing

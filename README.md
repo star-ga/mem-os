@@ -1,7 +1,7 @@
 <p align="center">
   <h1 align="center">Mem OS</h1>
   <p align="center">
-    <strong>Memory + Immune System for OpenClaw agents</strong>
+    <strong>Memory + Immune System for AI coding agents</strong>
   </p>
   <p align="center">
     Local-first &bull; Auditable &bull; Governance-aware
@@ -11,13 +11,13 @@
     <a href="https://github.com/star-ga/mem-os/releases"><img src="https://img.shields.io/github/v/release/star-ga/mem-os?style=flat-square&color=green" alt="Release"></a>
     <img src="https://img.shields.io/badge/python-3.10%2B-blue?style=flat-square&logo=python&logoColor=white" alt="Python 3.10+">
     <img src="https://img.shields.io/badge/dependencies-zero-brightgreen?style=flat-square" alt="Zero Dependencies">
-    <img src="https://img.shields.io/badge/OpenClaw-2026.2-purple?style=flat-square&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0id2hpdGUiPjxwYXRoIGQ9Ik0xMiAyQzYuNDggMiAyIDYuNDggMiAxMnM0LjQ4IDEwIDEwIDEwIDEwLTQuNDggMTAtMTBTMTcuNTIgMiAxMiAyem0wIDE4Yy00LjQyIDAtOC0zLjU4LTgtOHMzLjU4LTggOC04IDggMy41OCA4IDgtMy41OCA4LTggOHoiLz48L3N2Zz4=" alt="OpenClaw 2026.2">
+    <img src="https://img.shields.io/badge/MCP-compatible-purple?style=flat-square" alt="MCP Compatible">
   </p>
 </p>
 
 ---
 
-Drop-in memory layer for [OpenClaw](https://github.com/openclaw/openclaw) (2026.2+). Upgrades your agent from "chat history + notes" to a governed **Memory OS** with structured persistence, contradiction detection, drift analysis, safe governance, and full audit trail.
+Drop-in memory layer for AI coding agents (Claude Code, Claude Desktop, Cursor, Windsurf, OpenClaw, or any MCP-compatible client). Upgrades your agent from "chat history + notes" to a governed **Memory OS** with structured persistence, contradiction detection, drift analysis, safe governance, and full audit trail.
 
 > **If your agent runs for weeks, it will drift. Mem OS prevents silent drift.**
 
@@ -181,7 +181,7 @@ Graduated resolution pipeline: timestamp priority, confidence priority, scope sp
 Crash-safe writes via journal-based WAL. Full workspace backup (tar.gz), git-friendly JSONL export, selective restore with conflict detection and path traversal protection.
 
 ### Transcript JSONL Capture
-Scans Claude Code / OpenClaw transcript files for user corrections, convention discoveries, bug fix insights, and architectural decisions. 16 transcript-specific patterns with role filtering and confidence classification.
+Scans Claude Code transcript files for user corrections, convention discoveries, bug fix insights, and architectural decisions. 16 transcript-specific patterns with role filtering and confidence classification.
 
 ### 74+ Structural Checks + 478 Unit Tests
 `validate.sh` checks schemas, cross-references, ID formats, status values, supersede chains, ConstraintSignatures, and more. Backed by 478 pytest unit tests covering parser, recall (BM25 + stemming + expansion + context packing), capture (structured extraction + confidence), compaction, file locking, observability, namespaces, conflict resolution, WAL/backup, transcript capture, apply, intel_scan, schema migration, MCP server, and edge cases.
@@ -248,7 +248,26 @@ Gives you `/scan`, `/apply`, and `/recall` slash commands in Claude Code.
 
 ### 7. Add hooks (optional)
 
-**Option A: OpenClaw hooks** (recommended for OpenClaw 2026.2+)
+**Option A: Claude Code hooks** (recommended)
+
+Merge into your `.claude/hooks.json`:
+
+```json
+{
+  "hooks": [
+    {
+      "event": "SessionStart",
+      "command": "bash .mem-os/hooks/session-start.sh"
+    },
+    {
+      "event": "Stop",
+      "command": "bash .mem-os/hooks/session-end.sh"
+    }
+  ]
+}
+```
+
+**Option B: OpenClaw hooks** (for OpenClaw 2026.2+)
 
 ```bash
 cp -r .mem-os/hooks/openclaw/mem-os ~/.openclaw/hooks/mem-os
@@ -269,25 +288,6 @@ Configure workspace path in `~/.openclaw/openclaw.json`:
       }
     }
   }
-}
-```
-
-**Option B: Claude Code hooks** (shell-based, works with any Claude Code-compatible tool)
-
-Merge into your `.claude/hooks.json`:
-
-```json
-{
-  "hooks": [
-    {
-      "event": "SessionStart",
-      "command": "bash .mem-os/hooks/session-start.sh"
-    },
-    {
-      "event": "Stop",
-      "command": "bash .mem-os/hooks/session-end.sh"
-    }
-  ]
 }
 ```
 
@@ -473,7 +473,7 @@ Compared against every major memory solution for AI agents (as of 2026):
 | Zero deps | — | — | — | — | — | — | — | — | **✓** |
 | No daemon | — | — | — | — | — | ✓ | — | — | **✓** |
 | Git-friendly | — | — | — | Part | — | — | — | — | **✓** |
-| OpenClaw | — | Plug | Plug | — | — | Plug | — | — | **Native (hooks + MCP)** |
+| CLI / MCP | — | Plug | Plug | — | — | Plug | — | — | **Native (hooks + MCP)** |
 | MCP server | — | — | — | — | — | — | — | — | **✓** |
 
 ### What Each Tool Does Best
@@ -819,13 +819,13 @@ Add to your MCP config (`.cursor/mcp.json` or equivalent):
 }
 ```
 
-### OpenClaw (2026.2+)
+### Direct (stdio / HTTP)
 
 ```bash
-# stdio transport (default)
+# stdio transport (default — for any MCP client)
 MEM_OS_WORKSPACE=/path/to/workspace python3 mcp_server.py
 
-# HTTP transport (multi-client)
+# HTTP transport (multi-client / remote)
 MEM_OS_WORKSPACE=/path/to/workspace python3 mcp_server.py --transport http --port 8765
 ```
 
