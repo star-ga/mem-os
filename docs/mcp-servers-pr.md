@@ -3,7 +3,7 @@
 ## Entry to add (alphabetical, after "Maybe Don't AI Policy Engine"):
 
 ```markdown
-- **[Mem-OS](https://github.com/star-ga/mem-os)** - Append-only, auditable memory with contradiction detection, drift analysis, multi-agent namespaces, and BM25 recall. Proposal-based governance (propose_update writes to SIGNALS.md only, never source of truth). Zero dependencies, git-diffable Markdown blocks. 369 tests, benchmarked on LoCoMo and LongMemEval.
+- **[Mem-OS](https://github.com/star-ga/mem-os)** - Append-only, auditable memory with contradiction detection, drift analysis, multi-agent namespaces, and BM25 recall. Proposal-based governance (propose_update writes to SIGNALS.md only, never source of truth). Zero dependencies, git-diffable Markdown blocks. 478 tests, benchmarked on LoCoMo and LongMemEval.
 ```
 
 ## PR Title
@@ -44,7 +44,7 @@ pip install "fastmcp>=2.0"
 git clone https://github.com/star-ga/mem-os.git
 ```
 
-MIT License. 369 tests.
+MIT License. 478 tests.
 ```
 
 ## Checklist

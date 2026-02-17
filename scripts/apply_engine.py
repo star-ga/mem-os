@@ -879,11 +879,13 @@ def _load_intel_state(ws):
 
 
 def _save_intel_state(ws, state):
-    """Save intel-state.json."""
+    """Save intel-state.json atomically (write to temp, then rename)."""
     path = os.path.join(ws, "memory/intel-state.json")
-    with open(path, "w") as f:
+    tmp_path = path + ".tmp"
+    with open(tmp_path, "w") as f:
         json.dump(state, f, indent=2)
         f.write("\n")
+    os.replace(tmp_path, path)
 
 
 # ═══════════════════════════════════════════════

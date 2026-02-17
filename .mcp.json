@@ -1,6 +1,6 @@
 {
   "name": "mem-os",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "description": "Append-only, auditable memory with contradiction detection, namespaces, proposals, BM25 recall. Zero dependencies, git-diffable Markdown. Ideal for OpenClaw/Claude coding agents.",
   "tags": [
     "persistent-memory",

@@ -60,9 +60,9 @@ def check_migration_needed(workspace: str) -> list[str]:
 
     steps = []
     for from_v, to_v, desc, _fn in _MIGRATIONS:
-        _version_tuple(from_v)
+        from_t = _version_tuple(from_v)
         to_t = _version_tuple(to_v)
-        if current_t < to_t:
+        if current_t >= from_t and current_t < to_t:
             steps.append(f"{from_v} -> {to_v}: {desc}")
     return steps
 

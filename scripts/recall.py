@@ -1173,7 +1173,6 @@ def rerank_hits(
 
     # Anchor rule: ensure BM25 top-1 is in final set
     if bm25_top1_id:
-        {h["_id"] for h in hits[:max(10, len(hits))]}
         if bm25_top1_id not in {h["_id"] for h in hits[:10]}:
             # Find it and swap into position
             for i, h in enumerate(hits):
@@ -1494,7 +1493,7 @@ def recall(workspace: str, query: str, limit: int = 10, active_only: bool = Fals
         graph_boost = True
 
     # Adjust effective limit for retrieval (retrieve more candidates, trim later)
-    int(limit * qparams.get("extra_limit_factor", 1.0))
+    limit = int(limit * qparams.get("extra_limit_factor", 1.0))
 
     # Namespace ACL: resolve accessible paths if agent_id is provided
     ns_manager = None

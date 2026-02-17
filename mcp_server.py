@@ -227,6 +227,7 @@ def recall(query: str, limit: int = 10, active_only: bool = False) -> str:
         JSON array of ranked results with scores, IDs, and matched content.
     """
     ws = _workspace()
+    limit = max(1, min(limit, 100))
     # Use FTS5 index when it exists, otherwise fall back to scan
     if os.path.isfile(fts_db_path(ws)):
         results = fts_query(ws, query, limit=limit, active_only=active_only)

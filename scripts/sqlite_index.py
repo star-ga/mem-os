@@ -127,7 +127,7 @@ def _init_schema(conn: sqlite3.Connection) -> None:
 
 def _file_hash(path: str) -> str:
     """Compute fast hash of file content (first 64KB + size)."""
-    h = hashlib.md5()
+    h = hashlib.sha256()
     try:
         with open(path, "rb") as f:
             h.update(f.read(65536))
@@ -458,8 +458,8 @@ def query_index(
     conn = _connect(workspace, readonly=True)
 
     # Build FTS5 MATCH query from tokens
-    # Use OR to be inclusive, let ranking sort relevance
-    fts_query = " OR ".join(query_tokens)
+    # Quote each token to prevent FTS5 operator injection (NOT, AND, NEAR, etc.)
+    fts_query = " OR ".join(f'"{t}"' for t in query_tokens)
 
     try:
         # FTS5 bm25() returns negative scores (lower = better)

@@ -23,7 +23,7 @@ from __future__ import annotations
 import os
 import re
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from filelock import FileLock
@@ -168,7 +168,7 @@ def find_all_logs(workspace: str, days: int = 7) -> list[tuple[str, str]]:
         path = os.path.join(memory_dir, f"{date}.md")
         if os.path.isfile(path):
             logs.append((path, date))
-        cutoff = cutoff.replace(day=cutoff.day) - __import__("datetime").timedelta(days=1)
+        cutoff = cutoff - timedelta(days=1)
 
     return logs
 
