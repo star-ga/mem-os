@@ -904,6 +904,9 @@ def apply_proposal(ws, proposal_id, dry_run=False, agent_id=None):
         dry_run: Validate without executing.
         agent_id: Optional agent ID for namespace ACL enforcement.
     """
+    # Resolve symlinks early so all downstream code uses canonical paths.
+    # Fixes macOS /var → /private/var mismatch in relpath computations.
+    ws = os.path.realpath(ws)
     print("═══ Mem OS Apply Engine v1.0 ═══")
     print(f"Proposal: {proposal_id}")
     print(f"Workspace: {ws}")
@@ -1143,6 +1146,7 @@ def _mark_proposal_status(source_file, proposal_id, new_status):
 
 def rollback(ws, receipt_ts):
     """Rollback from a receipt timestamp."""
+    ws = os.path.realpath(ws)
     # Sanitize receipt_ts: must match YYYYMMDD-HHMMSS format (no traversal)
     if not re.match(r"^\d{8}-\d{6}$", receipt_ts):
         print(f"ERROR: Invalid receipt timestamp format: {receipt_ts} (expected YYYYMMDD-HHMMSS)")

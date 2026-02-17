@@ -53,7 +53,7 @@ class WAL:
     """
 
     def __init__(self, workspace: str) -> None:
-        self.workspace = os.path.abspath(workspace)
+        self.workspace = os.path.realpath(workspace)
         self.wal_dir = os.path.join(self.workspace, ".mem-os-wal")
         os.makedirs(self.wal_dir, exist_ok=True)
 
