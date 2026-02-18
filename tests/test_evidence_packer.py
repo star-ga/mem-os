@@ -178,14 +178,14 @@ class TestPackStructured:
         hits = [_hit(long_text, score=9.0), _hit(long_text, score=8.0)]
         result = pack_evidence(hits, max_chars=100)
         # Only one hit should fit (or none if first line > 100)
-        lines = [l for l in result.split("\n") if l.strip()]
+        lines = [ln for ln in result.split("\n") if ln.strip()]
         assert len(lines) <= 1
 
     def test_empty_excerpt_skipped(self):
         hits = [_hit(""), _hit("real text")]
         result = pack_evidence(hits)
         assert "real text" in result
-        lines = [l for l in result.split("\n") if l.strip()]
+        lines = [ln for ln in result.split("\n") if ln.strip()]
         assert len(lines) == 1
 
     def test_missing_speaker_shows_unknown(self):
@@ -309,7 +309,7 @@ class TestPackAdversarial:
         result = pack_evidence(
             hits, question="Did Emma ever mention adopting dogs?", query_type="adversarial"
         )
-        lines = [l for l in result.split("\n") if l.startswith("- ")]
+        lines = [ln for ln in result.split("\n") if ln.startswith("- ")]
         # The more relevant hit should appear first
         if len(lines) >= 2:
             assert "adopting" in lines[0] or "dogs" in lines[0]

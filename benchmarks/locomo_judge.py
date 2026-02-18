@@ -760,7 +760,6 @@ def main():
     # LoCoMo10 has exactly 10 conversations. Ensure cache exists via subprocess.
     cache_file = os.path.join(_HERE, ".cache", "locomo10.json")
     if not os.path.isfile(cache_file):
-        harness_path = os.path.join(_HERE, "locomo_harness.py")
         sp.run([sys.executable, "-c",
                 "import sys; sys.path.insert(0, %r); sys.path.insert(0, %r); "
                 "from locomo_harness import download_dataset; download_dataset()"
